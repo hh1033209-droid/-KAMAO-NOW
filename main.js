@@ -148,6 +148,7 @@ function updateAdCount() {
     updateAdLimitDisplay();
 }
 
+// ========== WATCH AD (SIMPLIFIED - JUST TIMER) ==========
 window.watchAd = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -177,24 +178,9 @@ window.watchAd = async function() {
     const reward = appSettings.adReward;
     isAdPlaying = true;
     
-    if (typeof _adsterra !== 'undefined') {
-        try {
-            _adsterra('showPopunder', { adUnitId: ADSTERRA_POPUNDER });
-            
-            // Get actual ad duration from Adsterra if possible
-            let adDuration = 30;
-            
-            showAdTimer(adDuration, reward, currentCount);
-            
-        } catch (error) {
-            console.error("Ad error:", error);
-            showToast("Ad failed to load. Try again!", "error");
-            isAdPlaying = false;
-        }
-    } else {
-        showToast("Ad system loading. Please wait or refresh.", "error");
-        isAdPlaying = false;
-    }
+    // Popunder ad automatically show hoga due to script in head
+    // Sirf timer show karo
+    showAdTimer(30, reward, currentCount);
 };
 
 function showAdTimer(duration, reward, currentCount) {
