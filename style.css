@@ -166,6 +166,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.task-item:hover {
+    transform: translateY(-2px);
 }
 
 .task-item.completed {
@@ -182,6 +188,187 @@ body {
     cursor: pointer;
 }
 
+/* Offer Details Styles */
+.offer-detail-card {
+    background: white;
+    border-radius: 24px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.offer-detail-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 30px 20px;
+    text-align: center;
+}
+
+.offer-detail-header h2 {
+    margin: 15px 0 10px;
+    font-size: 22px;
+}
+
+.offer-reward {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    padding: 8px 20px;
+    border-radius: 40px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.offer-detail-body {
+    padding: 20px;
+}
+
+.offer-instructions {
+    margin-bottom: 25px;
+}
+
+.offer-instructions h3 {
+    margin-bottom: 12px;
+    color: #1e293b;
+    font-size: 18px;
+}
+
+.offer-instructions ol {
+    margin-left: 20px;
+}
+
+.offer-instructions li {
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+.start-offer-btn {
+    width: 100%;
+    padding: 14px;
+    background: #f59e0b;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 15px 0;
+    transition: all 0.3s;
+}
+
+.start-offer-btn:hover {
+    background: #d97706;
+    transform: scale(1.02);
+}
+
+.offer-note {
+    background: #fef3c7;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Single Ad Button Styles */
+.single-ad-container {
+    margin-bottom: 25px;
+}
+
+.ad-card-large {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    padding: 30px 20px;
+    border-radius: 25px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.3s, box-shadow 0.3s;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+.ad-card-large:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+}
+
+.ad-card-large i {
+    font-size: 70px;
+    color: white;
+    margin-bottom: 15px;
+}
+
+.ad-card-large h3 {
+    font-size: 24px;
+    color: white;
+    margin-bottom: 10px;
+}
+
+.ad-card-large p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.8);
+    margin-bottom: 15px;
+}
+
+.ad-reward-large {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 8px 20px;
+    border-radius: 40px;
+    font-size: 20px;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.ad-limit-info {
+    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+    margin-top: 10px;
+}
+
+/* Offerwall Card */
+.offerwall-card {
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+    border-radius: 20px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: transform 0.3s;
+}
+
+.offerwall-card:hover {
+    transform: translateY(-3px);
+}
+
+.offerwall-card i {
+    font-size: 40px;
+    color: white;
+    margin-bottom: 10px;
+}
+
+.offerwall-card h3 {
+    color: white;
+    margin-bottom: 8px;
+}
+
+.offerwall-card p {
+    color: rgba(255,255,255,0.8);
+    font-size: 13px;
+    margin-bottom: 15px;
+}
+
+.offerwall-btn {
+    background: white;
+    color: #f59e0b;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* Ads Container */
 .ads-container {
     display: flex;
     flex-direction: column;

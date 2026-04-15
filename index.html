@@ -6,6 +6,22 @@
     <title>KamaoNow - Earn Real Money</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Adsterra Header Code -->
+    <script>
+        (function(s,o,l,v,e,a,d){
+            s['_adsterra']=e;
+            s[e]=s[e]||function(){(s[e].q=s[e].q||[]).push(arguments)};
+            a=o.createElement(l);
+            a.async=1;
+            a.src=v;
+            d=o.getElementsByTagName(l)[0];
+            d.parentNode.insertBefore(a,d);
+        })(window,document,'script','https://files.adsterra.com/adserver/loader.js','_adsterra');
+        
+        _adsterra('init', {
+            publicKey: 'YOUR_PUBLIC_KEY'  // ← Apni public key yahan daalna
+        });
+    </script>
 </head>
 <body>
 
@@ -78,28 +94,55 @@
     </div>
 </div>
 
-<!-- Tasks Screen -->
+<!-- Tasks Screen (Offerwall Offers) -->
 <div id="tasksScreen" class="screen">
     <div class="screen-header">
         <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
-        <h2>Daily Tasks</h2>
+        <h2>Offers & Tasks</h2>
     </div>
     <div id="tasksList" class="tasks-container"></div>
 </div>
 
-<!-- Earn Screen -->
+<!-- Offer Details Screen -->
+<div id="offerDetailsScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('tasks')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Offer Details</h2>
+        <div></div>
+    </div>
+    <div id="offerDetailsContainer"></div>
+    <div style="padding: 20px;">
+        <button class="task-btn" onclick="window.completeOfferFromDetails()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea, #764ba2);">
+            <i class="fas fa-check-circle"></i> I've Completed the Offer
+        </button>
+    </div>
+</div>
+
+<!-- Earn Screen - Single Ad Button -->
 <div id="earnScreen" class="screen">
     <div class="screen-header">
         <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
         <h2>Watch & Earn</h2>
     </div>
-    <div class="ads-container">
-        <div class="ad-card" onclick="watchAd('normal')"><i class="fas fa-play-circle"></i><h3>Watch Video Ad</h3><p>Earn ₨ 5</p><span class="ad-reward">+₨5</span></div>
-        <div class="ad-card" onclick="watchAd('rewarded')"><i class="fas fa-gem"></i><h3>Rewarded Ad</h3><p>Earn ₨ 15</p><span class="ad-reward">+₨15</span></div>
-        <div class="ad-card" onclick="watchAd('special')"><i class="fas fa-gift"></i><h3>Special Offer</h3><p>Earn ₨ 50</p><span class="ad-reward">+₨50</span></div>
+    
+    <!-- Single Ad Button -->
+    <div class="single-ad-container">
+        <div class="ad-card-large" onclick="watchAd()">
+            <i class="fas fa-play-circle"></i>
+            <h3>Watch Video Ad</h3>
+            <p>Watch a short video ad to earn money</p>
+            <div class="ad-reward-large">+₨ 0.60</div>
+            <div class="ad-limit-info" id="adLimitInfo">Today: 0/20 ads watched</div>
+        </div>
     </div>
+    
+    <!-- Daily Bonus Section -->
     <div class="daily-bonus">
         <h3>Daily Bonus</h3>
+        <div class="bonus-timer">
+            <i class="fas fa-calendar-day"></i>
+            <span>Claim once per day</span>
+        </div>
         <button class="claim-btn" onclick="claimDailyBonus()">Claim Daily Bonus</button>
     </div>
 </div>
@@ -151,14 +194,21 @@
     <div class="refer-container">
         <div class="refer-stats"><div class="refer-stat"><h3 id="referTotal">0</h3><p>Total Referrals</p></div><div class="refer-stat"><h3 id="referEarned">₨ 0</h3><p>Commission Earned</p></div></div>
         <div class="refer-link-box"><p>Your Referral Link</p><div class="link-display"><span id="referralLink">Loading...</span><button onclick="copyReferralLink()"><i class="fas fa-copy"></i></button></div></div>
-        <div class="refer-info"><h3>How it works?</h3><ul><li><i class="fas fa-user-plus"></i> Invite friends to join</li><li><i class="fas fa-percent"></i> Get 15% of their earnings</li><li><i class="fas fa-trophy"></i> Earn bonus on referrals</li></ul></div>
+        <div class="refer-info">
+            <h3>How it works?</h3>
+            <ul>
+                <li><i class="fas fa-user-plus"></i> Invite friends to join</li>
+                <li><i class="fas fa-percent"></i> Get <span id="referCommissionDisplay">15</span>% of their earnings</li>
+                <li><i class="fas fa-trophy"></i> Earn bonus on referrals</li>
+            </ul>
+        </div>
     </div>
 </div>
 
 <!-- Bottom Navigation -->
 <div class="bottom-nav">
     <div class="nav-item" onclick="navigateTo('home')"><i class="fas fa-home"></i><span>Home</span></div>
-    <div class="nav-item" onclick="navigateTo('tasks')"><i class="fas fa-tasks"></i><span>Tasks</span></div>
+    <div class="nav-item" onclick="navigateTo('tasks')"><i class="fas fa-tasks"></i><span>Offers</span></div>
     <div class="nav-item" onclick="navigateTo('earn')"><i class="fas fa-play-circle"></i><span>Earn</span></div>
     <div class="nav-item" onclick="navigateTo('withdraw')"><i class="fas fa-money-bill-wave"></i><span>Withdraw</span></div>
     <div class="nav-item" onclick="navigateTo('withdrawHistory')"><i class="fas fa-history"></i><span>History</span></div>
