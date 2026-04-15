@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>KamaoNow - Earn Real Money</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- Auth Modal -->
+<div id="authModal" class="auth-modal">
+    <div class="auth-container">
+        <div class="auth-tabs">
+            <button class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
+            <button class="tab-btn" onclick="switchAuthTab('register')">Register</button>
+        </div>
+        <div id="loginForm" class="auth-form active">
+            <h2>Welcome Back!</h2>
+            <input type="email" id="loginEmail" placeholder="Email">
+            <input type="password" id="loginPassword" placeholder="Password">
+            <button onclick="loginUser()">Login</button>
+        </div>
+        <div id="registerForm" class="auth-form">
+            <h2>Create Account</h2>
+            <input type="text" id="regName" placeholder="Full Name">
+            <input type="email" id="regEmail" placeholder="Email">
+            <input type="password" id="regPassword" placeholder="Password (min 6)">
+            <input type="password" id="regConfirmPassword" placeholder="Confirm Password">
+            <button onclick="registerUser()">Register</button>
+        </div>
+    </div>
+</div>
+
+<!-- Main App -->
+<div id="appContainer" style="display: none;">
+    <div class="app-container">
+        <div class="header">
+            <div class="user-info">
+                <i class="fas fa-user-circle"></i>
+                <div>
+                    <span>Welcome back,</span>
+                    <h3 id="userName">User</h3>
+                </div>
+                <button class="logout-btn" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+            <div class="balance-card">
+                <i class="fas fa-wallet"></i>
+                <div>
+                    <span>Total Balance</span>
+                    <h2>₨ <span id="mainBalance">0</span></h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box"><i class="fas fa-tasks"></i><h3 id="todayTasks">0</h3><p>Today's Tasks</p></div>
+            <div class="stat-box"><i class="fas fa-users"></i><h3 id="referralsCount">0</h3><p>Referrals</p></div>
+            <div class="stat-box"><i class="fas fa-calendar-week"></i><h3 id="streakDays">0</h3><p>Day Streak</p></div>
+        </div>
+
+        <div class="quick-actions">
+            <h3>Quick Actions</h3>
+            <div class="action-buttons">
+                <button class="action-btn" onclick="navigateTo('tasks')"><i class="fas fa-check-circle"></i><span>Do Tasks</span></button>
+                <button class="action-btn" onclick="navigateTo('earn')"><i class="fas fa-play-circle"></i><span>Watch Ads</span></button>
+                <button class="action-btn" onclick="navigateTo('withdraw')"><i class="fas fa-money-bill-wave"></i><span>Withdraw</span></button>
+            </div>
+        </div>
+
+        <div class="recent-activities">
+            <h3>Recent Activity</h3>
+            <div id="activityList" class="activity-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Tasks Screen -->
+<div id="tasksScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Daily Tasks</h2>
+    </div>
+    <div id="tasksList" class="tasks-container"></div>
+</div>
+
+<!-- Earn Screen -->
+<div id="earnScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Watch & Earn</h2>
+    </div>
+    <div class="ads-container">
+        <div class="ad-card" onclick="watchAd('normal')"><i class="fas fa-play-circle"></i><h3>Watch Video Ad</h3><p>Earn ₨ 5</p><span class="ad-reward">+₨5</span></div>
+        <div class="ad-card" onclick="watchAd('rewarded')"><i class="fas fa-gem"></i><h3>Rewarded Ad</h3><p>Earn ₨ 15</p><span class="ad-reward">+₨15</span></div>
+        <div class="ad-card" onclick="watchAd('special')"><i class="fas fa-gift"></i><h3>Special Offer</h3><p>Earn ₨ 50</p><span class="ad-reward">+₨50</span></div>
+    </div>
+    <div class="daily-bonus">
+        <h3>Daily Bonus</h3>
+        <button class="claim-btn" onclick="claimDailyBonus()">Claim Daily Bonus</button>
+    </div>
+</div>
+
+<!-- Withdraw Screen -->
+<div id="withdrawScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Withdraw Money</h2>
+    </div>
+    <div class="withdraw-container">
+        <div class="withdraw-balance"><p>Available Balance</p><h2>₨ <span id="withdrawBalance">0</span></h2></div>
+        <div class="withdraw-methods">
+            <h3>Select Method</h3>
+            <div class="method-option" onclick="selectWithdrawalMethod('jazzcash')"><i class="fas fa-mobile-alt"></i><span>JazzCash</span><i class="fas fa-check-circle method-check"></i></div>
+            <div class="method-option" onclick="selectWithdrawalMethod('easypaisa')"><i class="fas fa-mobile-alt"></i><span>EasyPaisa</span><i class="fas fa-check-circle method-check"></i></div>
+            <div class="method-option" onclick="selectWithdrawalMethod('upaisa')"><i class="fas fa-university"></i><span>UPaisa</span><i class="fas fa-check-circle method-check"></i></div>
+        </div>
+        <div class="withdraw-input">
+            <label>Amount (Min ₨ 200)</label>
+            <input type="number" id="withdrawAmount" placeholder="Enter amount">
+            <input type="text" id="accountNumber" placeholder="Account Number">
+            <button class="withdraw-btn" onclick="requestWithdrawal()">Request Withdrawal</button>
+        </div>
+    </div>
+</div>
+
+<!-- Withdrawal History Screen -->
+<div id="withdrawHistoryScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('withdraw')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Withdrawal History</h2>
+    </div>
+    <div class="history-tabs">
+        <button class="history-tab active" onclick="filterWithdrawals('all')">All</button>
+        <button class="history-tab" onclick="filterWithdrawals('pending')">Pending</button>
+        <button class="history-tab" onclick="filterWithdrawals('approved')">Approved</button>
+        <button class="history-tab" onclick="filterWithdrawals('rejected')">Rejected</button>
+    </div>
+    <div id="withdrawalsList" class="withdrawals-list"><div class="empty-state">No withdrawal requests yet</div></div>
+</div>
+
+<!-- Refer Screen -->
+<div id="referScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Refer & Earn</h2>
+    </div>
+    <div class="refer-container">
+        <div class="refer-stats"><div class="refer-stat"><h3 id="referTotal">0</h3><p>Total Referrals</p></div><div class="refer-stat"><h3 id="referEarned">₨ 0</h3><p>Commission Earned</p></div></div>
+        <div class="refer-link-box"><p>Your Referral Link</p><div class="link-display"><span id="referralLink">Loading...</span><button onclick="copyReferralLink()"><i class="fas fa-copy"></i></button></div></div>
+        <div class="refer-info"><h3>How it works?</h3><ul><li><i class="fas fa-user-plus"></i> Invite friends to join</li><li><i class="fas fa-percent"></i> Get 15% of their earnings</li><li><i class="fas fa-trophy"></i> Earn bonus on referrals</li></ul></div>
+    </div>
+</div>
+
+<!-- Bottom Navigation -->
+<div class="bottom-nav">
+    <div class="nav-item" onclick="navigateTo('home')"><i class="fas fa-home"></i><span>Home</span></div>
+    <div class="nav-item" onclick="navigateTo('tasks')"><i class="fas fa-tasks"></i><span>Tasks</span></div>
+    <div class="nav-item" onclick="navigateTo('earn')"><i class="fas fa-play-circle"></i><span>Earn</span></div>
+    <div class="nav-item" onclick="navigateTo('withdraw')"><i class="fas fa-money-bill-wave"></i><span>Withdraw</span></div>
+    <div class="nav-item" onclick="navigateTo('withdrawHistory')"><i class="fas fa-history"></i><span>History</span></div>
+    <div class="nav-item" onclick="navigateTo('refer')"><i class="fas fa-users"></i><span>Refer</span></div>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
