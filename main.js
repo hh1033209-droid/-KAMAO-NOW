@@ -1,4 +1,4 @@
-// ========== KAMAONOW USER APP ==========
+// ========== KAMAONOW USER APP - WORKING ==========
 console.log("🚀 KamaoNow Loading...");
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
@@ -55,9 +55,8 @@ let appData = {
     tasks: []
 };
 
-// ========== ADSTERRA CODES ==========
-const ADSTERRA_POPUNDER = 29060911;
-const ADSTERRA_SMARTLINK = 29061106;
+// ========== ADSTERRA AD URL (ONLY FOR WATCH AD BUTTON) ==========
+const ADSTERRA_AD_URL = 'https://www.profitablecpmratenetwork.com/pkkm08akfn?key=ed49d6365e5b18d88893b4e8c985dfe7';
 
 // ========== LOAD SETTINGS ==========
 async function loadSettings() {
@@ -131,7 +130,7 @@ function hideLoading() {
     if (loader) loader.remove();
 }
 
-// ========== WATCH AD WITH DYNAMIC TRACKING ==========
+// ========== AD TRACKING FUNCTIONS ==========
 let isAdPlaying = false;
 
 function getTodayAdCount() {
@@ -148,7 +147,7 @@ function updateAdCount() {
     updateAdLimitDisplay();
 }
 
-// ========== WATCH AD (SIMPLIFIED - JUST TIMER) ==========
+// ========== WATCH AD FUNCTION - ONLY ON BUTTON CLICK ==========
 window.watchAd = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -178,14 +177,29 @@ window.watchAd = async function() {
     const reward = appSettings.adReward;
     isAdPlaying = true;
     
-    // Popunder ad automatically show hoga due to script in head
-    // Sirf timer show karo
-    showAdTimer(30, reward, currentCount);
+    // Show timer overlay
+    showAdTimerWithReward(30, reward, currentCount);
+    
+    // Open ad - ONLY HERE, NO RANDOM TRIGGERS
+    try {
+        const adWindow = window.open(ADSTERRA_AD_URL, '_blank');
+        if (adWindow) {
+            showToast("Ad opened! Complete watching to earn reward.", "info");
+        } else {
+            showToast("Popup blocked! Please allow popups.", "error");
+            isAdPlaying = false;
+        }
+    } catch (error) {
+        console.error("Ad error:", error);
+        showToast("Failed to open ad.", "error");
+        isAdPlaying = false;
+    }
 };
 
-function showAdTimer(duration, reward, currentCount) {
+function showAdTimerWithReward(duration, reward, currentCount) {
     let timeLeft = duration;
     const startTime = Date.now();
+    let rewardGiven = false;
     
     const overlay = document.createElement('div');
     overlay.id = 'adTimerOverlay';
@@ -202,21 +216,18 @@ function showAdTimer(duration, reward, currentCount) {
         justify-content: center;
         align-items: center;
         color: white;
-        font-family: monospace;
     `;
     
     overlay.innerHTML = `
         <div style="background: rgba(0,0,0,0.5); border-radius: 20px; padding: 30px; text-align: center; width: 80%; max-width: 300px;">
             <i class="fas fa-play-circle" style="font-size: 60px; color: #f59e0b; margin-bottom: 20px;"></i>
-            <h3 style="margin-bottom: 10px;">Watching Ad</h3>
-            <p style="margin-bottom: 15px; color: #94a3b8;">Please wait while ad plays...</p>
-            <div style="font-size: 48px; font-weight: bold; margin: 20px;" id="adTimerDisplay">${Math.ceil(timeLeft)}</div>
+            <h3>Watching Ad</h3>
+            <div style="font-size: 48px; font-weight: bold; margin: 20px;" id="adTimerDisplay">${timeLeft}</div>
             <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden;">
-                <div id="adProgress" style="width: 0%; height: 100%; background: #10b981; transition: width 0.1s linear;"></div>
+                <div id="adProgress" style="width: 0%; height: 100%; background: #10b981;"></div>
             </div>
-            <p style="margin-top: 15px; font-size: 12px; color: #94a3b8;">Don't close this window</p>
-            <p style="margin-top: 10px; font-size: 11px; color: #f59e0b;">You'll earn ₨${reward.toFixed(2)} after ad completes</p>
-            <p style="margin-top: 5px; font-size: 10px; color: #10b981;">Today: ${currentCount + 1}/${appSettings.adDailyLimit} ads watched</p>
+            <p style="margin-top: 15px;">You'll earn ₨${reward.toFixed(2)} after ad completes</p>
+            <p style="margin-top: 5px; font-size: 12px;">Today: ${currentCount + 1}/${appSettings.adDailyLimit} ads watched</p>
         </div>
     `;
     
@@ -230,23 +241,22 @@ function showAdTimer(duration, reward, currentCount) {
         timeLeft = Math.max(0, duration - elapsed);
         
         if (timerDisplay) timerDisplay.innerText = Math.ceil(timeLeft);
-        if (progressFill) progressFill.style.width = `${Math.min(100, (elapsed / duration) * 100)}%`;
+        if (progressFill) progressFill.style.width = `${(elapsed / duration) * 100}%`;
         
-        if (timeLeft <= 0) {
+        if (timeLeft <= 0 && !rewardGiven) {
             clearInterval(interval);
+            rewardGiven = true;
             overlay.remove();
-            completeAdWatch(reward);
+            completeAdWatchReward(reward);
         }
     }, 100);
 }
 
-async function completeAdWatch(reward) {
+async function completeAdWatchReward(reward) {
     if (!currentUser) {
         isAdPlaying = false;
         return;
     }
-    
-    showLoading("Adding reward...");
     
     try {
         const userRef = doc(db, 'users', currentUser.userId);
@@ -265,26 +275,14 @@ async function completeAdWatch(reward) {
         
     } catch (error) {
         console.error("Reward error:", error);
-        showToast("Error adding reward! Contact support.", "error");
+        showToast("Error adding reward!", "error");
     }
     
     hideLoading();
     isAdPlaying = false;
 }
 
-// ========== OPEN OFFERWALL (SMARTLINK) ==========
-window.openOfferwall = function(offerUrl, taskId, taskName, reward) {
-    if (!currentUser) {
-        showToast("Please login first!", "error");
-        return;
-    }
-    
-    const url = `https://publisher.adsterra.com/smartlink/${ADSTERRA_SMARTLINK}/`;
-    window.open(url, '_blank');
-    showToast("Complete offers to earn rewards!", "info");
-};
-
-// ========== LOAD AND RENDER TASKS (OFFERS) ==========
+// ========== LOAD AND RENDER TASKS ==========
 async function loadTasks() {
     try {
         const snapshot = await getDocs(collection(db, 'tasks'));
@@ -309,7 +307,7 @@ function renderTasksList() {
     
     container.innerHTML = '';
     if (appData.tasks.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:40px;">No offers available yet. Check back later!</div>';
+        container.innerHTML = '<div style="text-align:center; padding:40px;">No offers available yet.</div>';
         return;
     }
     
@@ -326,14 +324,14 @@ function renderTasksList() {
         div.innerHTML = `
             <div style="display: flex; gap: 12px; align-items: center; flex: 1;">
                 <i class="fas ${task.icon || 'fa-gift'}" style="font-size: 24px; color: #667eea;"></i>
-                <div style="flex: 1;">
+                <div>
                     <strong>${task.name}</strong>
-                    <div style="color:#10b981; font-weight:bold;">+₨ ${task.reward}</div>
-                    <small style="color:#666;">${task.description || 'Click to view offer details'}</small>
+                    <div style="color:#10b981;">+₨ ${task.reward}</div>
+                    <small>${task.description || ''}</small>
                 </div>
             </div>
             <div>
-                ${!isCompleted ? '<span style="background:#f59e0b; color:white; padding:5px 12px; border-radius:20px; font-size:12px;">View Offer</span>' : '<span style="color:#10b981;"><i class="fas fa-check-circle"></i> Completed</span>'}
+                ${!isCompleted ? '<span style="background:#f59e0b; color:white; padding:5px 12px; border-radius:20px;">View Offer</span>' : '<span style="color:#10b981;">✓ Completed</span>'}
             </div>
         `;
         container.appendChild(div);
@@ -345,38 +343,28 @@ function showOfferDetails(task) {
     const offerDetailsScreen = document.getElementById('offerDetailsScreen');
     const container = document.getElementById('offerDetailsContainer');
     
-    let instructionsHtml = '';
+    let instructionsHtml = '<p>Complete this offer to earn rewards.</p>';
     if (task.instructions) {
         const steps = task.instructions.split('\n');
-        instructionsHtml = '<ol style="margin: 10px 0 0 20px;">';
-        steps.forEach(step => {
-            if (step.trim()) instructionsHtml += `<li style="margin: 8px 0;">${step.trim()}</li>`;
-        });
+        instructionsHtml = '<ol>';
+        steps.forEach(step => { if (step.trim()) instructionsHtml += `<li>${step.trim()}</li>`; });
         instructionsHtml += '</ol>';
-    } else {
-        instructionsHtml = '<p>Complete this offer to earn rewards.</p>';
     }
     
     container.innerHTML = `
         <div class="offer-detail-card">
             <div class="offer-detail-header">
-                <i class="fas ${task.icon || 'fa-gift'}" style="font-size: 40px; color: #667eea;"></i>
+                <i class="fas ${task.icon || 'fa-gift'}"></i>
                 <h2>${task.name}</h2>
                 <div class="offer-reward">+₨ ${task.reward}</div>
             </div>
             <div class="offer-detail-body">
                 <div class="offer-instructions">
-                    <h3><i class="fas fa-list-ol"></i> How to complete:</h3>
+                    <h3>How to complete:</h3>
                     ${instructionsHtml}
                 </div>
-                ${task.link ? `
-                    <button class="start-offer-btn" onclick="window.openOfferwall()">
-                        <i class="fas fa-external-link-alt"></i> Start Offer
-                    </button>
-                ` : ''}
-                <div class="offer-note">
-                    <i class="fas fa-info-circle"></i> After completing the offer, come back and click "I've Completed"
-                </div>
+                ${task.link ? `<button class="start-offer-btn" onclick="window.open('${task.link}', '_blank')">Start Offer</button>` : ''}
+                <div class="offer-note">After completing, come back and click "I've Completed"</div>
             </div>
         </div>
     `;
@@ -385,59 +373,47 @@ function showOfferDetails(task) {
     offerDetailsScreen.classList.add('active');
 }
 
-window.openOfferLink = function() {
-    if (currentOffer && currentOffer.link) {
-        window.open(currentOffer.link, '_blank');
-        showToast("Complete the offer, then come back and submit proof", "info");
-    } else {
-        window.openOfferwall();
-    }
-}
-
 window.completeOfferFromDetails = function() {
-    if (!currentUser) { showToast("Please login first!", "error"); return; }
-    if (appData.completedTasks.includes(currentOffer.id)) { showToast("Offer already completed!", "error"); return; }
+    if (!currentUser || !currentOffer) return;
+    if (appData.completedTasks.includes(currentOffer.id)) {
+        showToast("Already completed!", "error");
+        return;
+    }
     
-    const proof = prompt(`📸 Offer: ${currentOffer.name}\n\nReward: ₨${currentOffer.reward}\n\nPaste your proof (screenshot link or description):`);
+    const proof = prompt(`Submit proof for: ${currentOffer.name}\n\nPaste screenshot link:`);
     if (!proof) { showToast("Proof required!", "error"); return; }
     
     showLoading("Submitting...");
     completeTaskRequest(currentOffer.id, currentOffer.name, currentOffer.reward, currentOffer.link, proof);
-}
+};
 
 async function completeTaskRequest(taskId, taskName, reward, taskLink, proof) {
     try {
         await addDoc(collection(db, 'task_requests'), {
-            userId: currentUser.userId,
-            userName: currentUser.name,
-            taskId: taskId,
-            taskName: taskName,
-            reward: reward,
-            proof: proof,
-            taskLink: taskLink,
-            status: 'pending',
-            submittedAt: new Date().toISOString()
+            userId: currentUser.userId, userName: currentUser.name, taskId, taskName, reward, proof, taskLink,
+            status: 'pending', submittedAt: new Date().toISOString()
         });
-        showToast("✅ Offer submitted! Admin will verify.", "success");
-        addActivity(`📝 Submitted "${taskName}" for verification`);
+        showToast("✅ Submitted! Admin will verify.", "success");
+        addActivity(`📝 Submitted "${taskName}"`);
         navigateTo('tasks');
         currentOffer = null;
     } catch (error) { 
-        showToast("Failed to submit!", "error");
+        showToast("Failed!", "error");
         console.error(error);
     }
     hideLoading();
 }
 
-// ========== WITHDRAWAL REQUEST ==========
+// ========== WITHDRAWAL FUNCTIONS ==========
 window.requestWithdrawal = async function() {
-    if (!currentUser) { showToast("Please login first!", "error"); return; }
+    if (!currentUser) return;
     const amount = parseInt(document.getElementById('withdrawAmount')?.value);
     const account = document.getElementById('accountNumber')?.value;
     const method = selectedMethod;
+    
     if (!method) { showToast("Select method!", "error"); return; }
     if (!amount || amount < appSettings.minWithdrawal) { 
-        showToast(`Minimum withdrawal is ₨${appSettings.minWithdrawal}!`, "error"); 
+        showToast(`Min ₨${appSettings.minWithdrawal}!`, "error"); 
         return; 
     }
     if (!account) { showToast("Enter account!", "error"); return; }
@@ -456,8 +432,9 @@ window.requestWithdrawal = async function() {
         appData.balance -= amount;
         updateUI();
         
-        showToast(`✅ Withdrawal request of ₨${amount} submitted!`, "success");
-        addActivity(`💰 Withdrawal request of ₨${amount} submitted`);
+        showToast(`✅ Withdrawal request submitted!`, "success");
+        addActivity(`💰 Withdrawal request of ₨${amount}`);
+        
         document.getElementById('withdrawAmount').value = '';
         document.getElementById('accountNumber').value = '';
         document.querySelectorAll('.method-option').forEach(opt => opt.classList.remove('selected'));
@@ -507,7 +484,7 @@ function renderWithdrawals() {
     let filtered = allWithdrawals;
     if (currentFilter !== 'all') filtered = allWithdrawals.filter(w => w.status === currentFilter);
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state">No withdrawal requests found</div>';
+        container.innerHTML = '<div class="empty-state">No withdrawals</div>';
         return;
     }
     container.innerHTML = filtered.map(w => `
@@ -517,9 +494,9 @@ function renderWithdrawals() {
                 <span class="withdrawal-status status-${w.status}">${w.status}</span>
             </div>
             <div class="withdrawal-details">
-                <p><i class="fas fa-credit-card"></i> ${w.methodDisplay || w.method}</p>
-                <p><i class="fas fa-user"></i> Account: ${w.accountNumber}</p>
-                <p><i class="fas fa-calendar"></i> ${w.date}</p>
+                <p>${w.methodDisplay}</p>
+                <p>Account: ${w.accountNumber}</p>
+                <p>${w.date}</p>
             </div>
         </div>
     `).join('');
@@ -529,7 +506,7 @@ window.claimDailyBonus = async function() {
     if (!currentUser) return;
     const lastBonus = localStorage.getItem('lastBonus_' + currentUser.userId);
     const today = new Date().toDateString();
-    if (lastBonus === today) { showToast("Already claimed today!", "error"); return; }
+    if (lastBonus === today) { showToast("Already claimed!", "error"); return; }
     const bonus = 20 + (appData.streak * 2);
     showLoading("Claiming...");
     await new Promise(r => setTimeout(r, 1000));
@@ -538,7 +515,7 @@ window.claimDailyBonus = async function() {
         await updateDoc(userRef, { balance: increment(bonus), streak: increment(1) });
         appData.balance += bonus; appData.streak++;
         localStorage.setItem('lastBonus_' + currentUser.userId, today);
-        updateUI(); addActivity(`🎁 Claimed daily bonus of ₨${bonus}`);
+        updateUI(); addActivity(`🎁 Daily bonus ₨${bonus}`);
         showToast(`🎁 +₨${bonus} bonus!`, "success");
     } catch (error) { showToast("Failed!", "error"); }
     hideLoading();
@@ -587,7 +564,7 @@ function addActivity(message) {
 function updateActivities() {
     const container = document.getElementById('activityList');
     if (!container) return;
-    if (appData.activities.length === 0) { container.innerHTML = '<div style="text-align:center; padding:20px;">No activities yet</div>'; return; }
+    if (appData.activities.length === 0) { container.innerHTML = '<div>No activities</div>'; return; }
     container.innerHTML = appData.activities.map(a => `<div class="activity-item"><i class="fas fa-history"></i><div><div>${a.message}</div><small>${a.time}</small></div></div>`).join('');
 }
 
@@ -610,7 +587,7 @@ async function loadUserData(userId) {
 window.loginUser = async function() {
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
-    if (!email || !password) { showToast("Please fill all fields!", "error"); return; }
+    if (!email || !password) { showToast("Enter email & password!", "error"); return; }
     showLoading("Logging in...");
     try {
         const q = query(collection(db, 'users'), where('email', '==', email));
@@ -625,7 +602,7 @@ window.loginUser = async function() {
         document.getElementById('authModal').style.display = 'none';
         document.getElementById('appContainer').style.display = 'block';
         document.getElementById('userName').innerText = currentUser.name;
-        document.getElementById('referralLink').innerText = `${window.location.origin}/ref/${currentUser.userId}`;
+        document.getElementById('referralLink').innerText = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
         showToast(`✅ Welcome back, ${currentUser.name}!`, "success");
     } catch (error) { showToast("Login failed!", "error"); }
     hideLoading();
@@ -636,9 +613,9 @@ window.registerUser = async function() {
     const email = document.getElementById('regEmail').value;
     const password = document.getElementById('regPassword').value;
     const confirm = document.getElementById('regConfirmPassword').value;
-    if (!name || !email || !password) { showToast("Please fill all fields!", "error"); return; }
-    if (password !== confirm) { showToast("Passwords do not match!", "error"); return; }
-    if (password.length < 6) { showToast("Password must be at least 6 characters!", "error"); return; }
+    if (!name || !email || !password) { showToast("Fill all fields!", "error"); return; }
+    if (password !== confirm) { showToast("Passwords don't match!", "error"); return; }
+    if (password.length < 6) { showToast("Password too short!", "error"); return; }
     showLoading("Creating account...");
     try {
         await loadSettings();
@@ -649,10 +626,11 @@ window.registerUser = async function() {
         await setDoc(doc(db, 'users', userId), {
             userId, name, email, password: btoa(password), 
             balance: appSettings.welcomeBonus, 
+            tasksCompletedToday: 0,
             completedTasks: [],
             referrals: 0, streak: 1, createdAt: new Date().toISOString(), status: 'active'
         });
-        showToast(`✅ Registration successful! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
+        showToast(`✅ Registered! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
         switchAuthTab('login');
         document.getElementById('regName').value = '';
         document.getElementById('regEmail').value = '';
@@ -667,7 +645,7 @@ window.logoutUser = function() {
     currentUser = null;
     document.getElementById('authModal').style.display = 'flex';
     document.getElementById('appContainer').style.display = 'none';
-    showToast("Logged out successfully!", "success");
+    showToast("Logged out!", "success");
 };
 
 window.navigateTo = function(screen) {
@@ -696,8 +674,8 @@ window.switchAuthTab = function(tab) {
 };
 
 window.copyReferralLink = function() {
-    if (!currentUser) { showToast("Please login first!", "error"); return; }
-    const link = `${window.location.origin}/ref/${currentUser.userId}`;
+    if (!currentUser) { showToast("Login first!", "error"); return; }
+    const link = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
     navigator.clipboard.writeText(link);
     showToast("Referral link copied!", "success");
 };
