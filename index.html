@@ -18,12 +18,24 @@
             <button class="tab-btn active" onclick="switchAuthTab('login')">Login</button>
             <button class="tab-btn" onclick="switchAuthTab('register')">Register</button>
         </div>
+        
+        <!-- Login Form -->
         <div id="loginForm" class="auth-form active">
             <h2>Welcome Back!</h2>
             <input type="email" id="loginEmail" placeholder="Email">
             <input type="password" id="loginPassword" placeholder="Password">
             <button onclick="loginUser()">Login</button>
+            
+            <!-- Google Sign-In Button -->
+            <div class="auth-divider">
+                <span>OR</span>
+            </div>
+            <button onclick="signInWithGoogle()" class="google-btn">
+                <i class="fab fa-google"></i> Continue with Google
+            </button>
         </div>
+        
+        <!-- Register Form -->
         <div id="registerForm" class="auth-form">
             <h2>Create Account</h2>
             <input type="text" id="regName" placeholder="Full Name">
@@ -31,6 +43,13 @@
             <input type="password" id="regPassword" placeholder="Password (min 6)">
             <input type="password" id="regConfirmPassword" placeholder="Confirm Password">
             <button onclick="registerUser()">Register</button>
+            
+            <div class="auth-divider">
+                <span>OR</span>
+            </div>
+            <button onclick="signInWithGoogle()" class="google-btn">
+                <i class="fab fa-google"></i> Sign up with Google
+            </button>
         </div>
     </div>
 </div>
@@ -102,14 +121,13 @@
     </div>
 </div>
 
-<!-- Earn Screen - Single Ad Button -->
+<!-- Earn Screen -->
 <div id="earnScreen" class="screen">
     <div class="screen-header">
         <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
         <h2>Watch & Earn</h2>
     </div>
     
-    <!-- Single Ad Button -->
     <div class="single-ad-container">
         <div class="ad-card-large" onclick="watchAd()">
             <i class="fas fa-play-circle"></i>
@@ -120,13 +138,8 @@
         </div>
     </div>
     
-    <!-- Daily Bonus Section -->
     <div class="daily-bonus">
         <h3>Daily Bonus</h3>
-        <div class="bonus-timer">
-            <i class="fas fa-calendar-day"></i>
-            <span>Claim once per day</span>
-        </div>
         <button class="claim-btn" onclick="claimDailyBonus()">Claim Daily Bonus</button>
     </div>
 </div>

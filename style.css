@@ -537,6 +537,7 @@ body {
     gap: 10px;
 }
 
+/* Auth Modal */
 .auth-modal {
     position: fixed;
     top: 0;
@@ -608,6 +609,43 @@ body {
     margin-top: 15px;
 }
 
+/* ========== GOOGLE SIGN-IN BUTTON STYLES ========== */
+.auth-divider {
+    text-align: center;
+    margin: 15px 0;
+    position: relative;
+}
+
+.auth-divider span {
+    background: white;
+    padding: 0 10px;
+    color: #999;
+    font-size: 12px;
+}
+
+.google-btn {
+    background: white !important;
+    color: #333 !important;
+    border: 1px solid #ddd !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.google-btn:hover {
+    background: #f5f5f5 !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.google-btn i {
+    font-size: 18px;
+    color: #db4437;
+}
+
+/* Bottom Navigation */
 .bottom-nav {
     position: fixed;
     bottom: 0;

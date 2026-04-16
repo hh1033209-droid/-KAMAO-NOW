@@ -1,4 +1,4 @@
-// ========== KAMAONOW USER APP - WORKING ==========
+// ========== KAMAONOW USER APP - WITH GOOGLE AUTH & REWARD FIX ==========
 console.log("🚀 KamaoNow Loading...");
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
@@ -17,6 +17,7 @@ import {
     onSnapshot, 
     addDoc 
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBsny5xLAKyeFWBf1De4WKTfuNuzy5UIoA",
@@ -29,6 +30,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 let currentUser = null;
 let selectedMethod = null;
@@ -55,7 +57,7 @@ let appData = {
     tasks: []
 };
 
-// ========== ADSTERRA AD URL (ONLY FOR WATCH AD BUTTON) ==========
+// ========== ADSTERRA AD URL ==========
 const ADSTERRA_AD_URL = 'https://www.profitablecpmratenetwork.com/pkkm08akfn?key=ed49d6365e5b18d88893b4e8c985dfe7';
 
 // ========== LOAD SETTINGS ==========
@@ -147,7 +149,7 @@ function updateAdCount() {
     updateAdLimitDisplay();
 }
 
-// ========== WATCH AD FUNCTION - ONLY ON BUTTON CLICK ==========
+// ========== WATCH AD FUNCTION ==========
 window.watchAd = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -177,10 +179,8 @@ window.watchAd = async function() {
     const reward = appSettings.adReward;
     isAdPlaying = true;
     
-    // Show timer overlay
     showAdTimerWithReward(30, reward, currentCount);
     
-    // Open ad - ONLY HERE, NO RANDOM TRIGGERS
     try {
         const adWindow = window.open(ADSTERRA_AD_URL, '_blank');
         if (adWindow) {
@@ -282,6 +282,97 @@ async function completeAdWatchReward(reward) {
     isAdPlaying = false;
 }
 
+// ========== GOOGLE SIGN-IN FUNCTION ==========
+window.signInWithGoogle = async function() {
+    showLoading("Signing in with Google...");
+    
+    try {
+        const provider = new GoogleAuthProvider();
+        provider.addScope('profile');
+        provider.addScope('email');
+        
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        
+        console.log("Google user:", user);
+        console.log("Email:", user.email);
+        console.log("Name:", user.displayName);
+        
+        // Check if user exists in Firestore
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+            // New user - create account
+            await setDoc(userRef, {
+                userId: user.uid,
+                name: user.displayName || user.email.split('@')[0],
+                email: user.email,
+                password: "google_auth",
+                balance: appSettings.welcomeBonus,
+                tasksCompletedToday: 0,
+                completedTasks: [],
+                referrals: 0,
+                streak: 1,
+                createdAt: new Date().toISOString(),
+                status: 'active',
+                authProvider: 'google'
+            });
+            showToast(`✅ Welcome ${user.displayName || user.email}! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
+            addActivity(`🎉 New user joined via Google Sign-In`);
+        } else {
+            showToast(`✅ Welcome back, ${user.displayName || user.email}!`, "success");
+        }
+        
+        // Set current user
+        currentUser = {
+            userId: user.uid,
+            name: user.displayName || user.email.split('@')[0],
+            email: user.email
+        };
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        
+        await loadUserData(currentUser.userId);
+        
+        document.getElementById('authModal').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userName').innerText = currentUser.name;
+        document.getElementById('referralLink').innerText = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
+        
+    } catch (error) {
+        console.error("Google Sign-In Error:", error);
+        
+        if (error.code === 'auth/account-exists-with-different-credential') {
+            showToast("An account already exists with this email. Please sign in with email/password first.", "error");
+        } else if (error.code === 'auth/popup-blocked') {
+            showToast("Popup blocked! Please allow popups for this site.", "error");
+        } else {
+            showToast("Google Sign-In failed: " + error.message, "error");
+        }
+    }
+    
+    hideLoading();
+};
+
+// ========== UNIQUE CODE GENERATION ==========
+let pendingVerification = null;
+
+function generateUniqueCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ========== DETECT IF USER COMPLETED OFFER ==========
+async function detectOfferCompletion(offerId, userId) {
+    if (localStorage.getItem(`offer_${offerId}_completed`) === 'true') return true;
+    if (sessionStorage.getItem(`offer_${offerId}_status`) === 'completed') return true;
+    if (document.cookie.includes(`offer_${offerId}_done=true`)) return true;
+    
+    const startTime = localStorage.getItem(`offer_${offerId}_startTime`);
+    if (startTime && (Date.now() - parseInt(startTime)) > 60000) return true;
+    
+    return false;
+}
+
 // ========== LOAD AND RENDER TASKS ==========
 async function loadTasks() {
     try {
@@ -351,6 +442,8 @@ function showOfferDetails(task) {
         instructionsHtml += '</ol>';
     }
     
+    localStorage.setItem(`offer_${task.id}_startTime`, Date.now().toString());
+    
     container.innerHTML = `
         <div class="offer-detail-card">
             <div class="offer-detail-header">
@@ -363,8 +456,8 @@ function showOfferDetails(task) {
                     <h3>How to complete:</h3>
                     ${instructionsHtml}
                 </div>
-                ${task.link ? `<button class="start-offer-btn" onclick="window.open('${task.link}', '_blank')">Start Offer</button>` : ''}
-                <div class="offer-note">After completing, come back and click "I've Completed"</div>
+                ${task.link ? `<button class="start-offer-btn" onclick="window.openOfferInNewTab('${task.link}', ${task.id})">Start Offer</button>` : ''}
+                <div class="offer-note">After completing the offer, click "I've Completed" to get your verification code.</div>
             </div>
         </div>
     `;
@@ -373,35 +466,169 @@ function showOfferDetails(task) {
     offerDetailsScreen.classList.add('active');
 }
 
-window.completeOfferFromDetails = function() {
-    if (!currentUser || !currentOffer) return;
-    if (appData.completedTasks.includes(currentOffer.id)) {
-        showToast("Already completed!", "error");
+window.openOfferInNewTab = function(link, taskId) {
+    localStorage.setItem(`offer_${taskId}_opened`, 'true');
+    localStorage.setItem(`offer_${taskId}_startTime`, Date.now().toString());
+    window.open(link, '_blank');
+    showToast("Complete the offer, then come back to claim your reward.", "info");
+};
+
+// ========== COMPLETE OFFER WITH AUTO-DETECT & UNIQUE CODE ==========
+window.completeOfferFromDetails = async function() {
+    if (!currentUser) {
+        showToast("Please login first!", "error");
         return;
     }
     
-    const proof = prompt(`Submit proof for: ${currentOffer.name}\n\nPaste screenshot link:`);
-    if (!proof) { showToast("Proof required!", "error"); return; }
+    if (!currentOffer) {
+        showToast("No offer selected!", "error");
+        return;
+    }
     
-    showLoading("Submitting...");
-    completeTaskRequest(currentOffer.id, currentOffer.name, currentOffer.reward, currentOffer.link, proof);
+    if (appData.completedTasks.includes(currentOffer.id)) {
+        showToast("Offer already completed!", "error");
+        return;
+    }
+    
+    showLoading("Verifying offer completion...");
+    
+    const isCompleted = await detectOfferCompletion(currentOffer.id, currentUser.userId);
+    
+    if (!isCompleted) {
+        hideLoading();
+        showToast("❌ Please complete the offer first! Download the app and complete all steps, then try again.", "error");
+        return;
+    }
+    
+    const uniqueCode = generateUniqueCode();
+    pendingVerification = {
+        offerId: currentOffer.id,
+        offerName: currentOffer.name,
+        reward: currentOffer.reward,
+        code: uniqueCode,
+        userId: currentUser.userId
+    };
+    
+    hideLoading();
+    showCodeVerificationDialog(currentOffer.name, currentOffer.reward, uniqueCode);
 };
 
-async function completeTaskRequest(taskId, taskName, reward, taskLink, proof) {
-    try {
-        await addDoc(collection(db, 'task_requests'), {
-            userId: currentUser.userId, userName: currentUser.name, taskId, taskName, reward, proof, taskLink,
-            status: 'pending', submittedAt: new Date().toISOString()
-        });
-        showToast("✅ Submitted! Admin will verify.", "success");
-        addActivity(`📝 Submitted "${taskName}"`);
-        navigateTo('tasks');
-        currentOffer = null;
-    } catch (error) { 
-        showToast("Failed!", "error");
-        console.error(error);
+function showCodeVerificationDialog(offerName, reward, code) {
+    const dialog = document.createElement('div');
+    dialog.id = 'codeVerificationDialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 30000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
+    
+    dialog.innerHTML = `
+        <div style="background: white; border-radius: 20px; padding: 25px; width: 90%; max-width: 350px; text-align: center;">
+            <i class="fas fa-check-circle" style="font-size: 50px; color: #10b981; margin-bottom: 15px;"></i>
+            <h3>Offer Completed!</h3>
+            <p style="margin: 10px 0; color: #666;">${offerName}</p>
+            <p style="margin: 5px 0; font-size: 14px;">Reward: <strong style="color: #10b981;">₨ ${reward}</strong></p>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; margin: 15px 0;">
+                <p style="font-size: 12px; color: #666;">Your verification code:</p>
+                <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${code}</div>
+            </div>
+            <input type="text" id="verificationCodeInput" placeholder="Enter 6-digit code" maxlength="6" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 10px; text-align: center; font-size: 18px; letter-spacing: 3px;">
+            <button onclick="verifyAndClaimReward()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 25px; font-weight: bold; margin-top: 15px; cursor: pointer;">
+                Verify & Claim Reward
+            </button>
+            <button onclick="closeCodeDialog()" style="width: 100%; padding: 10px; background: none; border: none; color: #666; margin-top: 10px; cursor: pointer;">
+                Cancel
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+}
+
+window.verifyAndClaimReward = async function() {
+    const enteredCode = document.getElementById('verificationCodeInput')?.value;
+    
+    if (!enteredCode || enteredCode !== pendingVerification?.code) {
+        showToast("❌ Invalid code! Please enter the correct 6-digit code.", "error");
+        return;
     }
+    
+    if (!pendingVerification || !currentUser) {
+        showToast("Session expired! Please try again.", "error");
+        closeCodeDialog();
+        return;
+    }
+    
+    showLoading("Claiming reward...");
+    
+    try {
+        const userRef = doc(db, 'users', currentUser.userId);
+        
+        // Get current balance
+        const userSnap = await getDoc(userRef);
+        const currentBalance = userSnap.data()?.balance || 0;
+        console.log("Current balance:", currentBalance);
+        console.log("Adding reward:", pendingVerification.reward);
+        
+        // Update Firestore
+        await updateDoc(userRef, {
+            balance: increment(pendingVerification.reward),
+            completedTasks: arrayUnion(pendingVerification.offerId),
+            tasksCompletedToday: increment(1)
+        });
+        
+        // Verify update
+        const updatedSnap = await getDoc(userRef);
+        const newBalance = updatedSnap.data()?.balance || 0;
+        console.log("New balance:", newBalance);
+        
+        // Update local data
+        appData.balance = newBalance;
+        appData.completedTasks.push(pendingVerification.offerId);
+        
+        localStorage.setItem(`offer_${pendingVerification.offerId}_completed`, 'true');
+        localStorage.setItem(`offer_${pendingVerification.offerId}_code`, pendingVerification.code);
+        
+        await addDoc(collection(db, 'task_requests'), {
+            userId: currentUser.userId,
+            userName: currentUser.name,
+            taskId: pendingVerification.offerId,
+            taskName: pendingVerification.offerName,
+            reward: pendingVerification.reward,
+            proof: `Auto-verified with code: ${pendingVerification.code}`,
+            status: 'approved',
+            submittedAt: new Date().toISOString()
+        });
+        
+        updateUI();
+        addActivity(`✅ Offer "${pendingVerification.offerName}" completed! +₨${pendingVerification.reward}`);
+        showToast(`🎉 Reward claimed! +₨${pendingVerification.reward}`, "success");
+        
+        await loadTasks();
+        closeCodeDialog();
+        navigateTo('tasks');
+        
+        pendingVerification = null;
+        
+    } catch (error) {
+        console.error("Reward claim error:", error);
+        showToast("Error claiming reward: " + error.message, "error");
+    }
+    
     hideLoading();
+};
+
+function closeCodeDialog() {
+    const dialog = document.getElementById('codeVerificationDialog');
+    if (dialog) dialog.remove();
+    pendingVerification = null;
 }
 
 // ========== WITHDRAWAL FUNCTIONS ==========
@@ -690,4 +917,4 @@ if (savedUser) {
 }
 
 setInterval(() => { if (currentUser) checkPendingItems(); }, 30000);
-console.log("✅ KamaoNow Ready!");
+console.log("✅ KamaoNow Ready with Google Auth!");
