@@ -14,7 +14,6 @@ import {
     updateDoc, 
     increment, 
     arrayUnion, 
-    onSnapshot, 
     addDoc 
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
@@ -37,6 +36,7 @@ let selectedMethod = null;
 let currentFilter = 'all';
 let allWithdrawals = [];
 let currentOffer = null;
+let isAdPlaying = false;
 
 let appSettings = {
     minWithdrawal: 200,
@@ -57,41 +57,63 @@ let appData = {
     tasks: []
 };
 
-// ========== ADSTERRA AD URL ==========
 const ADSTERRA_AD_URL = 'https://www.profitablecpmratenetwork.com/pkkm08akfn?key=ed49d6365e5b18d88893b4e8c985dfe7';
 
-// ========== LOAD SETTINGS ==========
-async function loadSettings() {
-    try {
-        const settingsRef = doc(db, 'settings', 'app');
-        const settingsSnap = await getDoc(settingsRef);
-        if (settingsSnap.exists()) {
-            const data = settingsSnap.data();
-            appSettings.minWithdrawal = data.minWithdrawal !== undefined ? data.minWithdrawal : 200;
-            appSettings.dailyTaskLimit = data.dailyTaskLimit !== undefined ? data.dailyTaskLimit : 20;
-            appSettings.referralCommission = data.referralCommission !== undefined ? data.referralCommission : 15;
-            appSettings.welcomeBonus = data.welcomeBonus !== undefined ? data.welcomeBonus : 100;
-            appSettings.adReward = data.adReward !== undefined ? data.adReward : 0.10;
-            appSettings.adCooldown = data.adCooldown !== undefined ? data.adCooldown : 30;
-            appSettings.adDailyLimit = data.adDailyLimit !== undefined ? data.adDailyLimit : 20;
-        }
-        updateUISettings();
-    } catch (error) { console.error("Settings load error:", error); }
+// ========== HELPER FUNCTIONS ==========
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = `toast show ${type}`;
+    setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-function updateUISettings() {
-    const minWithdrawLabel = document.querySelector('.withdraw-input label');
-    if (minWithdrawLabel) minWithdrawLabel.innerHTML = `Amount (Min ₨${appSettings.minWithdrawal})`;
-    const withdrawAmountInput = document.getElementById('withdrawAmount');
-    if (withdrawAmountInput) {
-        withdrawAmountInput.placeholder = `Min ₨${appSettings.minWithdrawal}`;
-        withdrawAmountInput.min = appSettings.minWithdrawal;
+function showLoading(msg) {
+    let loader = document.getElementById('loadingOverlay');
+    if (loader) loader.remove();
+    loader = document.createElement('div');
+    loader.id = 'loadingOverlay';
+    loader.className = 'loading';
+    loader.innerHTML = `<div class="loader"></div><div>${msg}</div>`;
+    document.body.appendChild(loader);
+}
+
+function hideLoading() {
+    const loader = document.getElementById('loadingOverlay');
+    if (loader) loader.remove();
+}
+
+function addActivity(message) {
+    const activity = { id: Date.now(), message, time: new Date().toLocaleTimeString() };
+    appData.activities.unshift(activity);
+    if (appData.activities.length > 20) appData.activities.pop();
+    updateActivities();
+}
+
+function updateActivities() {
+    const container = document.getElementById('activityList');
+    if (!container) return;
+    if (appData.activities.length === 0) { 
+        container.innerHTML = '<div>No activities</div>'; 
+        return; 
     }
+    container.innerHTML = appData.activities.map(a => `<div class="activity-item"><i class="fas fa-history"></i><div><div>${a.message}</div><small>${a.time}</small></div></div>`).join('');
+}
+
+function updateUI() {
+    const balanceEl = document.getElementById('mainBalance');
+    if (balanceEl) balanceEl.innerText = appData.balance.toFixed(2);
+    const withdrawBalance = document.getElementById('withdrawBalance');
+    if (withdrawBalance) withdrawBalance.innerText = appData.balance.toFixed(2);
+    const streakDays = document.getElementById('streakDays');
+    if (streakDays) streakDays.innerText = appData.streak;
+    const referralsCount = document.getElementById('referralsCount');
+    if (referralsCount) referralsCount.innerText = appData.referrals;
+    const todayTasks = document.getElementById('todayTasks');
+    if (todayTasks) todayTasks.innerText = appData.completedTasks.length;
+    const referTotal = document.getElementById('referTotal');
+    if (referTotal) referTotal.innerText = appData.referrals;
     updateReferralDisplay();
     updateAdLimitDisplay();
-    
-    const adRewardSpan = document.getElementById('adRewardAmount');
-    if (adRewardSpan) adRewardSpan.innerText = appSettings.adReward.toFixed(2);
 }
 
 function updateReferralDisplay() {
@@ -115,31 +137,6 @@ function updateAdLimitDisplay() {
     }
 }
 
-function showToast(msg, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = msg;
-    toast.className = `toast show ${type}`;
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function showLoading(msg) {
-    let loader = document.getElementById('loadingOverlay');
-    if (loader) loader.remove();
-    loader = document.createElement('div');
-    loader.id = 'loadingOverlay';
-    loader.className = 'loading';
-    loader.innerHTML = `<div class="loader"></div><div>${msg}</div>`;
-    document.body.appendChild(loader);
-}
-
-function hideLoading() {
-    const loader = document.getElementById('loadingOverlay');
-    if (loader) loader.remove();
-}
-
-// ========== AD TRACKING FUNCTIONS ==========
-let isAdPlaying = false;
-
 function getTodayAdCount() {
     if (!currentUser) return 0;
     const today = new Date().toDateString();
@@ -154,52 +151,86 @@ function updateAdCount() {
     updateAdLimitDisplay();
 }
 
-// ========== WATCH AD FUNCTION - FIXED ==========
-window.watchAd = async function() {
+function updateUISettings() {
+    const minWithdrawLabel = document.querySelector('.withdraw-input label');
+    if (minWithdrawLabel) minWithdrawLabel.innerHTML = `Amount (Min ₨${appSettings.minWithdrawal})`;
+    const withdrawAmountInput = document.getElementById('withdrawAmount');
+    if (withdrawAmountInput) {
+        withdrawAmountInput.placeholder = `Min ₨${appSettings.minWithdrawal}`;
+        withdrawAmountInput.min = appSettings.minWithdrawal;
+    }
+    updateReferralDisplay();
+    updateAdLimitDisplay();
+    const adRewardSpan = document.getElementById('adRewardAmount');
+    if (adRewardSpan) adRewardSpan.innerText = appSettings.adReward.toFixed(2);
+}
+
+// ========== LOAD SETTINGS ==========
+async function loadSettings() {
+    try {
+        const settingsRef = doc(db, 'settings', 'app');
+        const settingsSnap = await getDoc(settingsRef);
+        if (settingsSnap.exists()) {
+            const data = settingsSnap.data();
+            appSettings.minWithdrawal = data.minWithdrawal !== undefined ? data.minWithdrawal : 200;
+            appSettings.dailyTaskLimit = data.dailyTaskLimit !== undefined ? data.dailyTaskLimit : 20;
+            appSettings.referralCommission = data.referralCommission !== undefined ? data.referralCommission : 15;
+            appSettings.welcomeBonus = data.welcomeBonus !== undefined ? data.welcomeBonus : 100;
+            appSettings.adReward = data.adReward !== undefined ? data.adReward : 0.10;
+            appSettings.adCooldown = data.adCooldown !== undefined ? data.adCooldown : 30;
+            appSettings.adDailyLimit = data.adDailyLimit !== undefined ? data.adDailyLimit : 20;
+        }
+        updateUISettings();
+    } catch (error) { console.error("Settings load error:", error); }
+}
+
+// ========== AD REWARD FUNCTION - FIXED (NO DUPLICATES) ==========
+async function completeAdWatchReward(reward) {
     if (!currentUser) {
-        showToast("Please login first!", "error");
+        console.log("No current user");
+        isAdPlaying = false;
         return;
     }
     
-    if (isAdPlaying) {
-        showToast("Ad is already playing! Please wait.", "error");
-        return;
-    }
-    
-    const lastAd = localStorage.getItem('lastAd_' + currentUser.userId);
-    const now = Date.now();
-    
-    if (lastAd && (now - parseInt(lastAd)) < appSettings.adCooldown * 1000) {
-        const waitTime = Math.ceil((appSettings.adCooldown * 1000 - (now - parseInt(lastAd))) / 1000);
-        showToast(`Wait ${waitTime} seconds before next ad!`, "error");
-        return;
-    }
-    
-    const currentCount = getTodayAdCount();
-    if (currentCount >= appSettings.adDailyLimit) {
-        showToast(`Daily limit reached (${appSettings.adDailyLimit} ads). Come back tomorrow!`, "error");
-        return;
-    }
-    
-    const reward = appSettings.adReward;
-    isAdPlaying = true;
-    
-    showAdTimerWithReward(30, reward, currentCount);
+    console.log("Adding reward:", reward, "to user:", currentUser.userId);
     
     try {
-        const adWindow = window.open(ADSTERRA_AD_URL, '_blank');
-        if (adWindow) {
-            showToast("Ad opened! Complete watching to earn reward.", "info");
-        } else {
-            showToast("Popup blocked! Please allow popups.", "error");
+        const userRef = doc(db, 'users', currentUser.userId);
+        
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+            console.error("User document not found!");
+            showToast("User data error! Please re-login.", "error");
             isAdPlaying = false;
+            return;
         }
+        
+        const currentBalance = userSnap.data()?.balance || 0;
+        console.log("Current balance before update:", currentBalance);
+        
+        const newBalance = currentBalance + reward;
+        
+        // Direct set value - no increment() to avoid issues
+        await updateDoc(userRef, { balance: newBalance });
+        
+        console.log("Balance updated to:", newBalance);
+        
+        appData.balance = newBalance;
+        localStorage.setItem('lastAd_' + currentUser.userId, Date.now().toString());
+        updateAdCount();
+        updateUI();
+        addActivity(`🎬 Watched ad and earned ₨${reward.toFixed(2)}`);
+        showToast(`🎬 +₨${reward.toFixed(2)} earned! Balance: ₨${newBalance.toFixed(2)}`, "success");
+        
+        console.log("Reward added successfully!");
+        
     } catch (error) {
-        console.error("Ad error:", error);
-        showToast("Failed to open ad.", "error");
-        isAdPlaying = false;
+        console.error("Error details:", error);
+        showToast("Error adding reward: " + error.message, "error");
     }
-};
+    
+    isAdPlaying = false;
+}
 
 function showAdTimerWithReward(duration, reward, currentCount) {
     let timeLeft = duration;
@@ -257,73 +288,54 @@ function showAdTimerWithReward(duration, reward, currentCount) {
     }, 100);
 }
 
-// 🔥 FIXED: Complete ad watch reward with better error handling
-async function completeAdWatchReward(reward) {
+// ========== WATCH AD FUNCTION ==========
+window.watchAd = async function() {
     if (!currentUser) {
-        console.log("No current user");
-        isAdPlaying = false;
+        showToast("Please login first!", "error");
         return;
     }
     
-    console.log("Adding reward:", reward, "to user:", currentUser.userId);
-    
-    try {
-        const userRef = doc(db, 'users', currentUser.userId);
-        
-        // First, check if user exists
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-            console.error("User document not found!");
-            showToast("User data error! Please re-login.", "error");
-            isAdPlaying = false;
-            return;
-        }
-        
-        const currentBalance = userSnap.data()?.balance || 0;
-        console.log("Current balance before update:", currentBalance);
-        
-        // Update using increment
-        await updateDoc(userRef, {
-            balance: increment(reward)
-        });
-        
-        // Verify the update
-        const updatedSnap = await getDoc(userRef);
-        const newBalance = updatedSnap.data()?.balance || 0;
-        console.log("New balance after update:", newBalance);
-        
-        // Update local data
-        appData.balance = newBalance;
-        
-        // Save timestamp for cooldown
-        localStorage.setItem('lastAd_' + currentUser.userId, Date.now().toString());
-        updateAdCount();
-        
-        // Update UI
-        updateUI();
-        addActivity(`🎬 Watched ad and earned ₨${reward.toFixed(2)}`);
-        showToast(`🎬 +₨${reward.toFixed(2)} earned! New balance: ₨${newBalance.toFixed(2)}`, "success");
-        
-        console.log("Reward added successfully!");
-        
-    } catch (error) {
-        console.error("Complete error details:", error);
-        
-        // Check for permission errors
-        if (error.code === 'permission-denied') {
-            showToast("Permission denied! Please check Firebase rules.", "error");
-            console.error("Firebase Rules Error: Make sure users can update their own documents");
-        } else if (error.code === 'not-found') {
-            showToast("User not found! Please re-login.", "error");
-        } else {
-            showToast("Error adding reward: " + error.message, "error");
-        }
+    if (isAdPlaying) {
+        showToast("Ad is already playing! Please wait.", "error");
+        return;
     }
     
-    isAdPlaying = false;
-}
+    const lastAd = localStorage.getItem('lastAd_' + currentUser.userId);
+    const now = Date.now();
+    
+    if (lastAd && (now - parseInt(lastAd)) < appSettings.adCooldown * 1000) {
+        const waitTime = Math.ceil((appSettings.adCooldown * 1000 - (now - parseInt(lastAd))) / 1000);
+        showToast(`Wait ${waitTime} seconds before next ad!`, "error");
+        return;
+    }
+    
+    const currentCount = getTodayAdCount();
+    if (currentCount >= appSettings.adDailyLimit) {
+        showToast(`Daily limit reached (${appSettings.adDailyLimit} ads). Come back tomorrow!`, "error");
+        return;
+    }
+    
+    const reward = appSettings.adReward;
+    isAdPlaying = true;
+    
+    showAdTimerWithReward(30, reward, currentCount);
+    
+    try {
+        const adWindow = window.open(ADSTERRA_AD_URL, '_blank');
+        if (adWindow) {
+            showToast("Ad opened! Complete watching to earn reward.", "info");
+        } else {
+            showToast("Popup blocked! Please allow popups.", "error");
+            isAdPlaying = false;
+        }
+    } catch (error) {
+        console.error("Ad error:", error);
+        showToast("Failed to open ad.", "error");
+        isAdPlaying = false;
+    }
+};
 
-// ========== GOOGLE SIGN-IN FUNCTION ==========
+// ========== GOOGLE SIGN-IN ==========
 window.signInWithGoogle = async function() {
     showLoading("Signing in with Google...");
     
@@ -382,25 +394,26 @@ window.signInWithGoogle = async function() {
     hideLoading();
 };
 
-// ========== UNIQUE CODE GENERATION ==========
-let pendingVerification = null;
-
-function generateUniqueCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+// ========== LOAD USER DATA ==========
+async function loadUserData(userId) {
+    try {
+        await loadSettings();
+        const userRef = doc(db, 'users', userId);
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            appData.balance = data.balance || 0;
+            appData.completedTasks = data.completedTasks || [];
+            appData.referrals = data.referrals || 0;
+            appData.streak = data.streak || 1;
+        }
+        updateUI(); 
+        await loadTasks(); 
+        checkPendingItems();
+    } catch (error) { console.error(error); }
 }
 
-async function detectOfferCompletion(offerId, userId) {
-    if (localStorage.getItem(`offer_${offerId}_completed`) === 'true') return true;
-    if (sessionStorage.getItem(`offer_${offerId}_status`) === 'completed') return true;
-    if (document.cookie.includes(`offer_${offerId}_done=true`)) return true;
-    
-    const startTime = localStorage.getItem(`offer_${offerId}_startTime`);
-    if (startTime && (Date.now() - parseInt(startTime)) > 60000) return true;
-    
-    return false;
-}
-
-// ========== LOAD AND RENDER TASKS ==========
+// ========== LOAD TASKS ==========
 async function loadTasks() {
     try {
         const snapshot = await getDocs(collection(db, 'tasks'));
@@ -500,153 +513,41 @@ window.openOfferInNewTab = function(link, taskId) {
     showToast("Complete the offer, then come back to claim your reward.", "info");
 };
 
-window.completeOfferFromDetails = async function() {
-    if (!currentUser) {
-        showToast("Please login first!", "error");
-        return;
+// ========== DAILY BONUS ==========
+window.claimDailyBonus = async function() {
+    if (!currentUser) return;
+    const lastBonus = localStorage.getItem('lastBonus_' + currentUser.userId);
+    const today = new Date().toDateString();
+    if (lastBonus === today) { 
+        showToast("Already claimed today's check-in bonus!", "error"); 
+        return; 
     }
     
-    if (!currentOffer) {
-        showToast("No offer selected!", "error");
-        return;
-    }
+    const bonus = 1;
     
-    if (appData.completedTasks.includes(currentOffer.id)) {
-        showToast("Offer already completed!", "error");
-        return;
-    }
-    
-    showLoading("Verifying offer completion...");
-    
-    const isCompleted = await detectOfferCompletion(currentOffer.id, currentUser.userId);
-    
-    if (!isCompleted) {
-        hideLoading();
-        showToast("❌ Please complete the offer first!", "error");
-        return;
-    }
-    
-    const uniqueCode = generateUniqueCode();
-    pendingVerification = {
-        offerId: currentOffer.id,
-        offerName: currentOffer.name,
-        reward: currentOffer.reward,
-        code: uniqueCode,
-        userId: currentUser.userId
-    };
-    
-    hideLoading();
-    showCodeVerificationDialog(currentOffer.name, currentOffer.reward, uniqueCode);
-};
-
-function showCodeVerificationDialog(offerName, reward, code) {
-    const dialog = document.createElement('div');
-    dialog.id = 'codeVerificationDialog';
-    dialog.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.8);
-        z-index: 30000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    `;
-    
-    dialog.innerHTML = `
-        <div style="background: white; border-radius: 20px; padding: 25px; width: 90%; max-width: 350px; text-align: center;">
-            <i class="fas fa-check-circle" style="font-size: 50px; color: #10b981; margin-bottom: 15px;"></i>
-            <h3>Offer Completed!</h3>
-            <p style="margin: 10px 0; color: #666;">${offerName}</p>
-            <p style="margin: 5px 0; font-size: 14px;">Reward: <strong style="color: #10b981;">₨ ${reward}</strong></p>
-            <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; margin: 15px 0;">
-                <p style="font-size: 12px; color: #666;">Your verification code:</p>
-                <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${code}</div>
-            </div>
-            <input type="text" id="verificationCodeInput" placeholder="Enter 6-digit code" maxlength="6" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 10px; text-align: center; font-size: 18px; letter-spacing: 3px;">
-            <button onclick="verifyAndClaimReward()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 25px; font-weight: bold; margin-top: 15px; cursor: pointer;">
-                Verify & Claim Reward
-            </button>
-            <button onclick="closeCodeDialog()" style="width: 100%; padding: 10px; background: none; border: none; color: #666; margin-top: 10px; cursor: pointer;">
-                Cancel
-            </button>
-        </div>
-    `;
-    
-    document.body.appendChild(dialog);
-}
-
-window.verifyAndClaimReward = async function() {
-    const enteredCode = document.getElementById('verificationCodeInput')?.value;
-    
-    if (!enteredCode || enteredCode !== pendingVerification?.code) {
-        showToast("❌ Invalid code!", "error");
-        return;
-    }
-    
-    if (!pendingVerification || !currentUser) {
-        showToast("Session expired!", "error");
-        closeCodeDialog();
-        return;
-    }
-    
-    showLoading("Claiming reward...");
-    
+    showLoading("Claiming check-in bonus...");
+    await new Promise(r => setTimeout(r, 1000));
     try {
         const userRef = doc(db, 'users', currentUser.userId);
         const userSnap = await getDoc(userRef);
-        const currentBalance = userSnap.data()?.balance || 0;
+        const newBalance = (userSnap.data()?.balance || 0) + bonus;
         
-        await updateDoc(userRef, {
-            balance: increment(pendingVerification.reward),
-            completedTasks: arrayUnion(pendingVerification.offerId)
+        await updateDoc(userRef, { 
+            balance: newBalance,
+            streak: (userSnap.data()?.streak || 1) + 1
         });
-        
-        const updatedSnap = await getDoc(userRef);
-        const newBalance = updatedSnap.data()?.balance || 0;
-        
-        appData.balance = newBalance;
-        appData.completedTasks.push(pendingVerification.offerId);
-        
-        localStorage.setItem(`offer_${pendingVerification.offerId}_completed`, 'true');
-        localStorage.setItem(`offer_${pendingVerification.offerId}_code`, pendingVerification.code);
-        
-        await addDoc(collection(db, 'task_requests'), {
-            userId: currentUser.userId,
-            userName: currentUser.name,
-            taskId: pendingVerification.offerId,
-            taskName: pendingVerification.offerName,
-            reward: pendingVerification.reward,
-            proof: `Auto-verified with code: ${pendingVerification.code}`,
-            status: 'approved',
-            submittedAt: new Date().toISOString()
-        });
-        
-        updateUI();
-        addActivity(`✅ Offer "${pendingVerification.offerName}" completed! +₨${pendingVerification.reward}`);
-        showToast(`🎉 Reward claimed! +₨${pendingVerification.reward}`, "success");
-        
-        await loadTasks();
-        closeCodeDialog();
-        navigateTo('tasks');
-        
-        pendingVerification = null;
-        
-    } catch (error) {
-        console.error("Reward claim error:", error);
-        showToast("Error claiming reward: " + error.message, "error");
+        appData.balance = newBalance; 
+        appData.streak++;
+        localStorage.setItem('lastBonus_' + currentUser.userId, today);
+        updateUI(); 
+        addActivity(`📅 Daily check-in bonus: ₨${bonus}`);
+        showToast(`📅 +₨${bonus} check-in bonus!`, "success");
+    } catch (error) { 
+        console.error(error);
+        showToast("Failed to claim bonus!", "error"); 
     }
-    
     hideLoading();
 };
-
-function closeCodeDialog() {
-    const dialog = document.getElementById('codeVerificationDialog');
-    if (dialog) dialog.remove();
-    pendingVerification = null;
-}
 
 // ========== WITHDRAWAL FUNCTIONS ==========
 window.requestWithdrawal = async function() {
@@ -672,8 +573,10 @@ window.requestWithdrawal = async function() {
         });
         
         const userRef = doc(db, 'users', currentUser.userId);
-        await updateDoc(userRef, { balance: increment(-amount) });
-        appData.balance -= amount;
+        const userSnap = await getDoc(userRef);
+        const newBalance = (userSnap.data()?.balance || 0) - amount;
+        await updateDoc(userRef, { balance: newBalance });
+        appData.balance = newBalance;
         updateUI();
         
         showToast(`✅ Withdrawal request submitted!`, "success");
@@ -746,39 +649,6 @@ function renderWithdrawals() {
     `).join('');
 }
 
-// ========== DAILY BONUS / CHECK-IN BONUS ==========
-window.claimDailyBonus = async function() {
-    if (!currentUser) return;
-    const lastBonus = localStorage.getItem('lastBonus_' + currentUser.userId);
-    const today = new Date().toDateString();
-    if (lastBonus === today) { 
-        showToast("Already claimed today's check-in bonus!", "error"); 
-        return; 
-    }
-    
-    const bonus = 1;
-    
-    showLoading("Claiming check-in bonus...");
-    await new Promise(r => setTimeout(r, 1000));
-    try {
-        const userRef = doc(db, 'users', currentUser.userId);
-        await updateDoc(userRef, { 
-            balance: increment(bonus), 
-            streak: increment(1) 
-        });
-        appData.balance += bonus; 
-        appData.streak++;
-        localStorage.setItem('lastBonus_' + currentUser.userId, today);
-        updateUI(); 
-        addActivity(`📅 Daily check-in bonus: ₨${bonus}`);
-        showToast(`📅 +₨${bonus} check-in bonus!`, "success");
-    } catch (error) { 
-        console.error(error);
-        showToast("Failed to claim bonus!", "error"); 
-    }
-    hideLoading();
-};
-
 async function checkPendingItems() {
     if (!currentUser) return;
     try {
@@ -788,8 +658,9 @@ async function checkPendingItems() {
             const data = docSnap.data();
             if (!appData.completedTasks.includes(data.taskId)) {
                 const userRef = doc(db, 'users', currentUser.userId);
+                const userSnap = await getDoc(userRef);
                 await updateDoc(userRef, {
-                    balance: increment(data.reward),
+                    balance: (userSnap.data()?.balance || 0) + data.reward,
                     completedTasks: arrayUnion(data.taskId)
                 });
                 appData.balance += data.reward;
@@ -801,46 +672,47 @@ async function checkPendingItems() {
     } catch (error) { console.error(error); }
 }
 
-function updateUI() {
-    document.getElementById('mainBalance').innerText = appData.balance.toFixed(2);
-    document.getElementById('withdrawBalance').innerText = appData.balance.toFixed(2);
-    document.getElementById('streakDays').innerText = appData.streak;
-    document.getElementById('referralsCount').innerText = appData.referrals;
-    document.getElementById('todayTasks').innerText = appData.completedTasks.length;
-    document.getElementById('referTotal').innerText = appData.referrals;
-    updateReferralDisplay();
-    updateAdLimitDisplay();
-}
+// ========== NAVIGATION ==========
+window.navigateTo = function(screen) {
+    const screens = ['home', 'tasks', 'earn', 'withdraw', 'withdrawHistory', 'refer'];
+    screens.forEach(s => { const el = document.getElementById(`${s}Screen`); if (el) el.classList.remove('active'); });
+    document.getElementById(`${screen}Screen`).classList.add('active');
+    if (screen === 'withdrawHistory') loadWithdrawalHistory();
+    if (screen === 'withdraw') updateUISettings();
+    if (screen === 'earn') updateAdLimitDisplay();
+    const navItems = document.querySelectorAll('.nav-item');
+    const map = { home: 0, tasks: 1, earn: 2, withdraw: 3, withdrawHistory: 4, refer: 5 };
+    navItems.forEach((item, i) => { if (i === map[screen]) item.classList.add('active'); else item.classList.remove('active'); });
+};
 
-function addActivity(message) {
-    const activity = { id: Date.now(), message, time: new Date().toLocaleTimeString() };
-    appData.activities.unshift(activity);
-    if (appData.activities.length > 20) appData.activities.pop();
-    updateActivities();
-}
+window.logoutUser = function() {
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    document.getElementById('authModal').style.display = 'flex';
+    document.getElementById('appContainer').style.display = 'none';
+    showToast("Logged out!", "success");
+};
 
-function updateActivities() {
-    const container = document.getElementById('activityList');
-    if (!container) return;
-    if (appData.activities.length === 0) { container.innerHTML = '<div>No activities</div>'; return; }
-    container.innerHTML = appData.activities.map(a => `<div class="activity-item"><i class="fas fa-history"></i><div><div>${a.message}</div><small>${a.time}</small></div></div>`).join('');
-}
+window.copyReferralLink = function() {
+    if (!currentUser) { showToast("Login first!", "error"); return; }
+    const link = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
+    navigator.clipboard.writeText(link);
+    showToast("Referral link copied!", "success");
+};
 
-async function loadUserData(userId) {
-    try {
-        await loadSettings();
-        const userRef = doc(db, 'users', userId);
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            appData.balance = data.balance || 0;
-            appData.completedTasks = data.completedTasks || [];
-            appData.referrals = data.referrals || 0;
-            appData.streak = data.streak || 1;
-        }
-        updateUI(); await loadTasks(); checkPendingItems();
-    } catch (error) { console.error(error); }
-}
+// ========== AUTH FUNCTIONS ==========
+window.switchAuthTab = function(tab) {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const tabs = document.querySelectorAll('.tab-btn');
+    if (tab === 'login') {
+        loginForm.classList.add('active'); registerForm.classList.remove('active');
+        tabs[0].classList.add('active'); tabs[1].classList.remove('active');
+    } else {
+        loginForm.classList.remove('active'); registerForm.classList.add('active');
+        tabs[0].classList.remove('active'); tabs[1].classList.add('active');
+    }
+};
 
 window.loginUser = async function() {
     const email = document.getElementById('loginEmail').value;
@@ -898,46 +770,7 @@ window.registerUser = async function() {
     hideLoading();
 };
 
-window.logoutUser = function() {
-    localStorage.removeItem('currentUser');
-    currentUser = null;
-    document.getElementById('authModal').style.display = 'flex';
-    document.getElementById('appContainer').style.display = 'none';
-    showToast("Logged out!", "success");
-};
-
-window.navigateTo = function(screen) {
-    const screens = ['home', 'tasks', 'earn', 'withdraw', 'withdrawHistory', 'refer'];
-    screens.forEach(s => { const el = document.getElementById(`${s}Screen`); if (el) el.classList.remove('active'); });
-    document.getElementById(`${screen}Screen`).classList.add('active');
-    if (screen === 'withdrawHistory') loadWithdrawalHistory();
-    if (screen === 'withdraw') updateUISettings();
-    if (screen === 'earn') updateAdLimitDisplay();
-    const navItems = document.querySelectorAll('.nav-item');
-    const map = { home: 0, tasks: 1, earn: 2, withdraw: 3, withdrawHistory: 4, refer: 5 };
-    navItems.forEach((item, i) => { if (i === map[screen]) item.classList.add('active'); else item.classList.remove('active'); });
-};
-
-window.switchAuthTab = function(tab) {
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-    const tabs = document.querySelectorAll('.tab-btn');
-    if (tab === 'login') {
-        loginForm.classList.add('active'); registerForm.classList.remove('active');
-        tabs[0].classList.add('active'); tabs[1].classList.remove('active');
-    } else {
-        loginForm.classList.remove('active'); registerForm.classList.add('active');
-        tabs[0].classList.remove('active'); tabs[1].classList.add('active');
-    }
-};
-
-window.copyReferralLink = function() {
-    if (!currentUser) { showToast("Login first!", "error"); return; }
-    const link = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
-    navigator.clipboard.writeText(link);
-    showToast("Referral link copied!", "success");
-};
-
+// ========== INIT ==========
 const savedUser = localStorage.getItem('currentUser');
 if (savedUser) {
     currentUser = JSON.parse(savedUser);
@@ -948,4 +781,4 @@ if (savedUser) {
 }
 
 setInterval(() => { if (currentUser) checkPendingItems(); }, 30000);
-console.log("✅ KamaoNow Ready with Google Auth!");
+console.log("✅ KamaoNow Ready! Ad Reward: ₨0.10 | Daily Bonus: ₨1");
