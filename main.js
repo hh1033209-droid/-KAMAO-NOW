@@ -1,4 +1,4 @@
-// ========== KAMAONOW USER APP - WITH GOOGLE AUTH & REWARD FIX ==========
+// ========== KAMAONOW USER APP - WITH FIXED GOOGLE LOGIN ==========
 console.log("🚀 KamaoNow Loading...");
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
@@ -12,7 +12,6 @@ import {
     query, 
     where, 
     updateDoc, 
-    increment, 
     arrayUnion, 
     addDoc 
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -62,6 +61,7 @@ const ADSTERRA_AD_URL = 'https://www.profitablecpmratenetwork.com/pkkm08akfn?key
 // ========== HELPER FUNCTIONS ==========
 function showToast(msg, type = 'success') {
     const toast = document.getElementById('toast');
+    if (!toast) return;
     toast.textContent = msg;
     toast.className = `toast show ${type}`;
     setTimeout(() => toast.classList.remove('show'), 3000);
@@ -184,7 +184,59 @@ async function loadSettings() {
     } catch (error) { console.error("Settings load error:", error); }
 }
 
-// ========== AD REWARD FUNCTION - FIXED (NO DUPLICATES) ==========
+// ========== DARK MASTER REFERRAL SYSTEM ==========
+
+function generateReferralCode(userId) {
+    const numericId = userId.replace(/\D/g, '');
+    if (numericId.length >= 6) {
+        return numericId.slice(-6);
+    }
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+window.shareReferralMessage = function() {
+    if (!currentUser) {
+        showToast("Please login first!", "error");
+        return;
+    }
+    
+    const userCode = currentUser.referralCode || generateReferralCode(currentUser.userId);
+    const message = `🚀 Join KamaoNow and earn real money!
+
+📱 Download: https://kamaonow.dpdns.org/
+
+🎁 MY REFERRAL CODE: ${userCode}
+
+Enter this code in the registration form to help me earn commission!
+
+✅ Complete tasks
+✅ Watch ads
+✅ Earn real money
+✅ Instant withdrawals
+
+Don't forget to enter the referral code!`;
+    
+    navigator.clipboard.writeText(message);
+    showToast("Referral message copied! Share with friends!", "success");
+};
+
+window.toggleReferralInput = function() {
+    const inputDiv = document.getElementById('referralCodeInput');
+    if (inputDiv) {
+        const isVisible = inputDiv.style.display === 'block';
+        inputDiv.style.display = isVisible ? 'none' : 'block';
+        const toggleIcon = document.querySelector('.referral-toggle i:last-child');
+        if (toggleIcon) {
+            if (!isVisible) {
+                toggleIcon.style.transform = 'rotate(180deg)';
+            } else {
+                toggleIcon.style.transform = 'rotate(0deg)';
+            }
+        }
+    }
+};
+
+// ========== AD REWARD FUNCTION ==========
 async function completeAdWatchReward(reward) {
     if (!currentUser) {
         console.log("No current user");
@@ -206,14 +258,9 @@ async function completeAdWatchReward(reward) {
         }
         
         const currentBalance = userSnap.data()?.balance || 0;
-        console.log("Current balance before update:", currentBalance);
-        
         const newBalance = currentBalance + reward;
         
-        // Direct set value - no increment() to avoid issues
         await updateDoc(userRef, { balance: newBalance });
-        
-        console.log("Balance updated to:", newBalance);
         
         appData.balance = newBalance;
         localStorage.setItem('lastAd_' + currentUser.userId, Date.now().toString());
@@ -221,8 +268,6 @@ async function completeAdWatchReward(reward) {
         updateUI();
         addActivity(`🎬 Watched ad and earned ₨${reward.toFixed(2)}`);
         showToast(`🎬 +₨${reward.toFixed(2)} earned! Balance: ₨${newBalance.toFixed(2)}`, "success");
-        
-        console.log("Reward added successfully!");
         
     } catch (error) {
         console.error("Error details:", error);
@@ -288,7 +333,6 @@ function showAdTimerWithReward(duration, reward, currentCount) {
     }, 100);
 }
 
-// ========== WATCH AD FUNCTION ==========
 window.watchAd = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -335,7 +379,7 @@ window.watchAd = async function() {
     }
 };
 
-// ========== GOOGLE SIGN-IN ==========
+// ========== FIXED GOOGLE SIGN-IN ==========
 window.signInWithGoogle = async function() {
     showLoading("Signing in with Google...");
     
@@ -344,6 +388,7 @@ window.signInWithGoogle = async function() {
         provider.addScope('profile');
         provider.addScope('email');
         
+        // 🔥 FIX: No recaptchaVerifier needed for popup
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
         
@@ -353,6 +398,7 @@ window.signInWithGoogle = async function() {
         const userSnap = await getDoc(userRef);
         
         if (!userSnap.exists()) {
+            const newReferralCode = generateReferralCode(user.uid);
             await setDoc(userRef, {
                 userId: user.uid,
                 name: user.displayName || user.email.split('@')[0],
@@ -364,7 +410,9 @@ window.signInWithGoogle = async function() {
                 streak: 1,
                 createdAt: new Date().toISOString(),
                 status: 'active',
-                authProvider: 'google'
+                authProvider: 'google',
+                referralCode: newReferralCode,
+                referredBy: null
             });
             showToast(`✅ Welcome! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
             addActivity(`🎉 New user joined via Google Sign-In`);
@@ -384,13 +432,111 @@ window.signInWithGoogle = async function() {
         document.getElementById('authModal').style.display = 'none';
         document.getElementById('appContainer').style.display = 'block';
         document.getElementById('userName').innerText = currentUser.name;
-        document.getElementById('referralLink').innerText = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
+        
+        // Update referral code display
+        const userCodeDisplay = document.getElementById('userReferralCode');
+        if (userCodeDisplay && currentUser.referralCode) {
+            userCodeDisplay.innerText = currentUser.referralCode;
+        }
         
     } catch (error) {
         console.error("Google Sign-In Error:", error);
-        showToast("Google Sign-In failed: " + error.message, "error");
+        
+        if (error.code === 'auth/popup-blocked') {
+            showToast("Popup blocked! Please allow popups for this site.", "error");
+        } else if (error.code === 'auth/unauthorized-domain') {
+            showToast("Domain not authorized. Add this domain in Firebase Console.", "error");
+        } else {
+            showToast("Google Sign-In failed: " + error.message, "error");
+        }
     }
     
+    hideLoading();
+};
+
+// ========== REGISTER USER WITH REFERRAL ==========
+window.registerUser = async function() {
+    const name = document.getElementById('regName').value;
+    const email = document.getElementById('regEmail').value;
+    const password = document.getElementById('regPassword').value;
+    const confirm = document.getElementById('regConfirmPassword').value;
+    const referralCode = document.getElementById('regReferralCode')?.value.trim() || '';
+    
+    if (!name || !email || !password) { 
+        showToast("Fill all fields!", "error"); 
+        return; 
+    }
+    if (password !== confirm) { 
+        showToast("Passwords don't match!", "error"); 
+        return; 
+    }
+    if (password.length < 6) { 
+        showToast("Password too short!", "error"); 
+        return; 
+    }
+    
+    showLoading("Creating account...");
+    try {
+        await loadSettings();
+        const q = query(collection(db, 'users'), where('email', '==', email));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) { 
+            showToast("Email already registered!", "error"); 
+            hideLoading(); 
+            return; 
+        }
+        
+        const userId = 'user_' + Date.now();
+        const newReferralCode = generateReferralCode(userId);
+        
+        await setDoc(doc(db, 'users', userId), {
+            userId, name, email, password: btoa(password), 
+            balance: appSettings.welcomeBonus, 
+            tasksCompletedToday: 0,
+            completedTasks: [],
+            referrals: 0, 
+            streak: 1, 
+            createdAt: new Date().toISOString(), 
+            status: 'active',
+            referralCode: newReferralCode,
+            referredBy: referralCode || null
+        });
+        
+        if (referralCode && referralCode.length === 6) {
+            const referrerQuery = query(collection(db, 'users'), 
+                where('referralCode', '==', referralCode));
+            const referrerSnap = await getDocs(referrerQuery);
+            
+            if (!referrerSnap.empty) {
+                referrerSnap.forEach(async (docSnap) => {
+                    const referrerData = docSnap.data();
+                    const bonusAmount = 25;
+                    await updateDoc(docSnap.ref, {
+                        balance: (referrerData.balance || 0) + bonusAmount,
+                        referrals: (referrerData.referrals || 0) + 1
+                    });
+                    showToast(`✅ Referrer gets ₨${bonusAmount} bonus!`, "success");
+                });
+            } else {
+                showToast("⚠️ Invalid referral code! No bonus given.", "warning");
+            }
+        }
+        
+        showToast(`✅ Registered! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
+        switchAuthTab('login');
+        
+        document.getElementById('regName').value = '';
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+        document.getElementById('regConfirmPassword').value = '';
+        if (document.getElementById('regReferralCode')) {
+            document.getElementById('regReferralCode').value = '';
+        }
+        
+    } catch (error) { 
+        console.error(error);
+        showToast("Registration failed!", "error"); 
+    }
     hideLoading();
 };
 
@@ -406,6 +552,16 @@ async function loadUserData(userId) {
             appData.completedTasks = data.completedTasks || [];
             appData.referrals = data.referrals || 0;
             appData.streak = data.streak || 1;
+            
+            if (currentUser) {
+                currentUser.referralCode = data.referralCode || generateReferralCode(userId);
+                currentUser.referredBy = data.referredBy || null;
+            }
+            
+            const userCodeDisplay = document.getElementById('userReferralCode');
+            if (userCodeDisplay && currentUser) {
+                userCodeDisplay.innerText = currentUser.referralCode;
+            }
         }
         updateUI(); 
         await loadTasks(); 
@@ -511,6 +667,129 @@ window.openOfferInNewTab = function(link, taskId) {
     localStorage.setItem(`offer_${taskId}_startTime`, Date.now().toString());
     window.open(link, '_blank');
     showToast("Complete the offer, then come back to claim your reward.", "info");
+};
+
+window.completeOfferFromDetails = async function() {
+    if (!currentUser) {
+        showToast("Please login first!", "error");
+        return;
+    }
+    
+    if (!currentOffer) {
+        showToast("No offer selected!", "error");
+        return;
+    }
+    
+    if (appData.completedTasks.includes(currentOffer.id)) {
+        showToast("Offer already completed!", "error");
+        return;
+    }
+    
+    showLoading("Verifying offer completion...");
+    
+    await new Promise(r => setTimeout(r, 2000));
+    
+    const uniqueCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    hideLoading();
+    
+    const dialog = document.createElement('div');
+    dialog.id = 'codeVerificationDialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 30000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
+    
+    dialog.innerHTML = `
+        <div style="background: white; border-radius: 20px; padding: 25px; width: 90%; max-width: 350px; text-align: center;">
+            <i class="fas fa-check-circle" style="font-size: 50px; color: #10b981; margin-bottom: 15px;"></i>
+            <h3>Verify Completion</h3>
+            <p style="margin: 10px 0; color: #666;">${currentOffer.name}</p>
+            <p style="margin: 5px 0; font-size: 14px;">Reward: <strong style="color: #10b981;">₨ ${currentOffer.reward}</strong></p>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; margin: 15px 0;">
+                <p style="font-size: 12px; color: #666;">Your verification code:</p>
+                <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${uniqueCode}</div>
+            </div>
+            <input type="text" id="verificationCodeInput" placeholder="Enter 6-digit code" maxlength="6" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 10px; text-align: center; font-size: 18px; letter-spacing: 3px;">
+            <button onclick="window.verifyAndClaimReward('${uniqueCode}', ${currentOffer.reward}, ${currentOffer.id}, '${currentOffer.name}')" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 25px; font-weight: bold; margin-top: 15px; cursor: pointer;">
+                Verify & Claim Reward
+            </button>
+            <button onclick="closeCodeDialog()" style="width: 100%; padding: 10px; background: none; border: none; color: #666; margin-top: 10px; cursor: pointer;">
+                Cancel
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+};
+
+window.verifyAndClaimReward = async function(code, reward, taskId, taskName) {
+    const enteredCode = document.getElementById('verificationCodeInput')?.value;
+    
+    if (!enteredCode || enteredCode !== code) {
+        showToast("❌ Invalid code! Please enter the correct 6-digit code.", "error");
+        return;
+    }
+    
+    if (!currentUser) {
+        showToast("Session expired! Please login again.", "error");
+        closeCodeDialog();
+        return;
+    }
+    
+    showLoading("Claiming reward...");
+    
+    try {
+        const userRef = doc(db, 'users', currentUser.userId);
+        const userSnap = await getDoc(userRef);
+        const newBalance = (userSnap.data()?.balance || 0) + reward;
+        
+        await updateDoc(userRef, {
+            balance: newBalance,
+            completedTasks: arrayUnion(taskId)
+        });
+        
+        appData.balance = newBalance;
+        appData.completedTasks.push(taskId);
+        
+        await addDoc(collection(db, 'task_requests'), {
+            userId: currentUser.userId,
+            userName: currentUser.name,
+            taskId: taskId,
+            taskName: taskName,
+            reward: reward,
+            proof: `Auto-verified with code: ${code}`,
+            status: 'approved',
+            submittedAt: new Date().toISOString()
+        });
+        
+        updateUI();
+        addActivity(`✅ Offer "${taskName}" completed! +₨${reward}`);
+        showToast(`🎉 Reward claimed! +₨${reward}`, "success");
+        
+        await loadTasks();
+        closeCodeDialog();
+        navigateTo('tasks');
+        
+    } catch (error) {
+        console.error("Reward claim error:", error);
+        showToast("Error claiming reward: " + error.message, "error");
+    }
+    
+    hideLoading();
+};
+
+window.closeCodeDialog = function() {
+    const dialog = document.getElementById('codeVerificationDialog');
+    if (dialog) dialog.remove();
 };
 
 // ========== DAILY BONUS ==========
@@ -695,9 +974,7 @@ window.logoutUser = function() {
 
 window.copyReferralLink = function() {
     if (!currentUser) { showToast("Login first!", "error"); return; }
-    const link = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
-    navigator.clipboard.writeText(link);
-    showToast("Referral link copied!", "success");
+    shareReferralMessage();
 };
 
 // ========== AUTH FUNCTIONS ==========
@@ -732,53 +1009,31 @@ window.loginUser = async function() {
         document.getElementById('authModal').style.display = 'none';
         document.getElementById('appContainer').style.display = 'block';
         document.getElementById('userName').innerText = currentUser.name;
-        document.getElementById('referralLink').innerText = `https://kamaonow.dpdns.org/ref/${currentUser.userId}`;
         showToast(`✅ Welcome back, ${currentUser.name}!`, "success");
     } catch (error) { showToast("Login failed!", "error"); }
     hideLoading();
 };
 
-window.registerUser = async function() {
-    const name = document.getElementById('regName').value;
-    const email = document.getElementById('regEmail').value;
-    const password = document.getElementById('regPassword').value;
-    const confirm = document.getElementById('regConfirmPassword').value;
-    if (!name || !email || !password) { showToast("Fill all fields!", "error"); return; }
-    if (password !== confirm) { showToast("Passwords don't match!", "error"); return; }
-    if (password.length < 6) { showToast("Password too short!", "error"); return; }
-    showLoading("Creating account...");
+// ========== FIXED INITIALIZATION ==========
+// Make sure auth modal is shown if not logged in
+const savedUserData = localStorage.getItem('currentUser');
+if (savedUserData) {
     try {
-        await loadSettings();
-        const q = query(collection(db, 'users'), where('email', '==', email));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) { showToast("Email already registered!", "error"); hideLoading(); return; }
-        const userId = 'user_' + Date.now();
-        await setDoc(doc(db, 'users', userId), {
-            userId, name, email, password: btoa(password), 
-            balance: appSettings.welcomeBonus, 
-            tasksCompletedToday: 0,
-            completedTasks: [],
-            referrals: 0, streak: 1, createdAt: new Date().toISOString(), status: 'active'
-        });
-        showToast(`✅ Registered! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
-        switchAuthTab('login');
-        document.getElementById('regName').value = '';
-        document.getElementById('regEmail').value = '';
-        document.getElementById('regPassword').value = '';
-        document.getElementById('regConfirmPassword').value = '';
-    } catch (error) { showToast("Registration failed!", "error"); }
-    hideLoading();
-};
-
-// ========== INIT ==========
-const savedUser = localStorage.getItem('currentUser');
-if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    document.getElementById('authModal').style.display = 'none';
-    document.getElementById('appContainer').style.display = 'block';
-    document.getElementById('userName').innerText = currentUser.name;
-    loadUserData(currentUser.userId);
+        currentUser = JSON.parse(savedUserData);
+        document.getElementById('authModal').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userName').innerText = currentUser.name;
+        loadUserData(currentUser.userId);
+    } catch (e) {
+        console.error("Error loading saved user:", e);
+        localStorage.removeItem('currentUser');
+        document.getElementById('authModal').style.display = 'flex';
+        document.getElementById('appContainer').style.display = 'none';
+    }
+} else {
+    document.getElementById('authModal').style.display = 'flex';
+    document.getElementById('appContainer').style.display = 'none';
 }
 
 setInterval(() => { if (currentUser) checkPendingItems(); }, 30000);
-console.log("✅ KamaoNow Ready! Ad Reward: ₨0.10 | Daily Bonus: ₨1");
+console.log("✅ KamaoNow Ready with Dark Master Referral System!");

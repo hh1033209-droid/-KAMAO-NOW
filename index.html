@@ -26,7 +26,6 @@
             <input type="password" id="loginPassword" placeholder="Password">
             <button onclick="loginUser()">Login</button>
             
-            <!-- Google Sign-In Button -->
             <div class="auth-divider">
                 <span>OR</span>
             </div>
@@ -35,14 +34,32 @@
             </button>
         </div>
         
-        <!-- Register Form -->
+        <!-- Register Form with Referral Code Option -->
         <div id="registerForm" class="auth-form">
             <h2>Create Account</h2>
             <input type="text" id="regName" placeholder="Full Name">
             <input type="email" id="regEmail" placeholder="Email">
             <input type="password" id="regPassword" placeholder="Password (min 6)">
             <input type="password" id="regConfirmPassword" placeholder="Confirm Password">
-            <button onclick="registerUser()">Register</button>
+            
+            <!-- DARK MASTER REFERRAL CODE SECTION -->
+            <div class="referral-code-box" onclick="toggleReferralInput()">
+                <div class="referral-toggle">
+                    <i class="fas fa-gift"></i>
+                    <span>Have a referral code? (Optional)</span>
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+                <div id="referralCodeInput" style="display: none;">
+                    <input type="text" id="regReferralCode" 
+                           placeholder="Enter 6-digit referral code"
+                           maxlength="6"
+                           pattern="[0-9]{6}"
+                           autocomplete="off">
+                    <small>Enter code if someone invited you. They'll earn commission!</small>
+                </div>
+            </div>
+            
+            <button onclick="registerUser()">Register & Earn</button>
             
             <div class="auth-divider">
                 <span>OR</span>
@@ -182,21 +199,39 @@
     <div id="withdrawalsList" class="withdrawals-list"><div class="empty-state">No withdrawal requests yet</div></div>
 </div>
 
-<!-- Refer Screen -->
+<!-- Refer Screen - Updated with Code System -->
 <div id="referScreen" class="screen">
     <div class="screen-header">
         <button class="back-btn" onclick="navigateTo('home')"><i class="fas fa-arrow-left"></i></button>
         <h2>Refer & Earn</h2>
     </div>
     <div class="refer-container">
-        <div class="refer-stats"><div class="refer-stat"><h3 id="referTotal">0</h3><p>Total Referrals</p></div><div class="refer-stat"><h3 id="referEarned">₨ 0</h3><p>Commission Earned</p></div></div>
-        <div class="refer-link-box"><p>Your Referral Link</p><div class="link-display"><span id="referralLink">Loading...</span><button onclick="copyReferralLink()"><i class="fas fa-copy"></i></button></div></div>
+        <div class="refer-stats">
+            <div class="refer-stat">
+                <h3 id="referTotal">0</h3>
+                <p>Total Referrals</p>
+            </div>
+            <div class="refer-stat">
+                <h3 id="referEarned">₨ 0</h3>
+                <p>Commission Earned</p>
+            </div>
+        </div>
+        
+        <div class="refer-code-display">
+            <p>Your Referral Code</p>
+            <div class="code-box" id="userReferralCode">Loading...</div>
+            <button class="share-btn" onclick="shareReferralMessage()">
+                <i class="fas fa-share-alt"></i> Share & Earn
+            </button>
+        </div>
+        
         <div class="refer-info">
             <h3>How it works?</h3>
             <ul>
-                <li><i class="fas fa-user-plus"></i> Invite friends to join</li>
+                <li><i class="fas fa-envelope"></i> Share your 6-digit code with friends</li>
+                <li><i class="fas fa-user-plus"></i> They enter code during registration</li>
                 <li><i class="fas fa-percent"></i> Get <span id="referCommissionDisplay">15</span>% of their earnings</li>
-                <li><i class="fas fa-trophy"></i> Earn bonus on referrals</li>
+                <li><i class="fas fa-gift"></i> ₨25 bonus per successful referral!</li>
             </ul>
         </div>
     </div>
