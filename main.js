@@ -43,7 +43,7 @@ let appSettings = {
     dailyTaskLimit: 20,
     referralCommission: 15,
     welcomeBonus: 100,
-    adReward: 0.60,
+    adReward: 0.10,
     adCooldown: 30,
     adDailyLimit: 20
 };
@@ -71,12 +71,12 @@ async function loadSettings() {
             appSettings.dailyTaskLimit = data.dailyTaskLimit !== undefined ? data.dailyTaskLimit : 20;
             appSettings.referralCommission = data.referralCommission !== undefined ? data.referralCommission : 15;
             appSettings.welcomeBonus = data.welcomeBonus !== undefined ? data.welcomeBonus : 100;
-            appSettings.adReward = data.adReward !== undefined ? data.adReward : 0.60;
+            appSettings.adReward = data.adReward !== undefined ? data.adReward : 0.10;
             appSettings.adCooldown = data.adCooldown !== undefined ? data.adCooldown : 30;
             appSettings.adDailyLimit = data.adDailyLimit !== undefined ? data.adDailyLimit : 20;
         }
         updateUISettings();
-    } catch (error) { console.error(error); }
+    } catch (error) { console.error("Settings load error:", error); }
 }
 
 function updateUISettings() {
@@ -89,6 +89,9 @@ function updateUISettings() {
     }
     updateReferralDisplay();
     updateAdLimitDisplay();
+    
+    const adRewardSpan = document.getElementById('adRewardAmount');
+    if (adRewardSpan) adRewardSpan.innerText = appSettings.adReward.toFixed(2);
 }
 
 function updateReferralDisplay() {
@@ -108,7 +111,7 @@ function updateAdLimitDisplay() {
     const count = parseInt(localStorage.getItem('dailyAdCount_' + currentUser.userId + '_' + today) || 0);
     const limitDisplay = document.getElementById('adLimitInfo');
     if (limitDisplay) {
-        limitDisplay.innerText = `Today: ${count}/${appSettings.adDailyLimit} ads watched`;
+        limitDisplay.innerText = `Today: ${count}/${appSettings.adDailyLimit} ads | ₨${appSettings.adReward.toFixed(2)} each`;
     }
 }
 
@@ -120,7 +123,9 @@ function showToast(msg, type = 'success') {
 }
 
 function showLoading(msg) {
-    const loader = document.createElement('div');
+    let loader = document.getElementById('loadingOverlay');
+    if (loader) loader.remove();
+    loader = document.createElement('div');
     loader.id = 'loadingOverlay';
     loader.className = 'loading';
     loader.innerHTML = `<div class="loader"></div><div>${msg}</div>`;
@@ -149,7 +154,7 @@ function updateAdCount() {
     updateAdLimitDisplay();
 }
 
-// ========== WATCH AD FUNCTION ==========
+// ========== WATCH AD FUNCTION - FIXED ==========
 window.watchAd = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -226,7 +231,7 @@ function showAdTimerWithReward(duration, reward, currentCount) {
             <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden;">
                 <div id="adProgress" style="width: 0%; height: 100%; background: #10b981;"></div>
             </div>
-            <p style="margin-top: 15px;">You'll earn ₨${reward.toFixed(2)} after ad completes</p>
+            <p style="margin-top: 15px;">You'll earn <span style="color: #f59e0b; font-weight: bold;">₨${reward.toFixed(2)}</span> after ad completes</p>
             <p style="margin-top: 5px; font-size: 12px;">Today: ${currentCount + 1}/${appSettings.adDailyLimit} ads watched</p>
         </div>
     `;
@@ -252,33 +257,69 @@ function showAdTimerWithReward(duration, reward, currentCount) {
     }, 100);
 }
 
+// 🔥 FIXED: Complete ad watch reward with better error handling
 async function completeAdWatchReward(reward) {
     if (!currentUser) {
+        console.log("No current user");
         isAdPlaying = false;
         return;
     }
     
+    console.log("Adding reward:", reward, "to user:", currentUser.userId);
+    
     try {
         const userRef = doc(db, 'users', currentUser.userId);
+        
+        // First, check if user exists
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+            console.error("User document not found!");
+            showToast("User data error! Please re-login.", "error");
+            isAdPlaying = false;
+            return;
+        }
+        
+        const currentBalance = userSnap.data()?.balance || 0;
+        console.log("Current balance before update:", currentBalance);
+        
+        // Update using increment
         await updateDoc(userRef, {
-            balance: increment(reward),
-            tasksCompletedToday: increment(1)
+            balance: increment(reward)
         });
         
-        appData.balance += reward;
+        // Verify the update
+        const updatedSnap = await getDoc(userRef);
+        const newBalance = updatedSnap.data()?.balance || 0;
+        console.log("New balance after update:", newBalance);
+        
+        // Update local data
+        appData.balance = newBalance;
+        
+        // Save timestamp for cooldown
         localStorage.setItem('lastAd_' + currentUser.userId, Date.now().toString());
         updateAdCount();
         
+        // Update UI
         updateUI();
         addActivity(`🎬 Watched ad and earned ₨${reward.toFixed(2)}`);
-        showToast(`🎬 +₨${reward.toFixed(2)} earned!`, "success");
+        showToast(`🎬 +₨${reward.toFixed(2)} earned! New balance: ₨${newBalance.toFixed(2)}`, "success");
+        
+        console.log("Reward added successfully!");
         
     } catch (error) {
-        console.error("Reward error:", error);
-        showToast("Error adding reward!", "error");
+        console.error("Complete error details:", error);
+        
+        // Check for permission errors
+        if (error.code === 'permission-denied') {
+            showToast("Permission denied! Please check Firebase rules.", "error");
+            console.error("Firebase Rules Error: Make sure users can update their own documents");
+        } else if (error.code === 'not-found') {
+            showToast("User not found! Please re-login.", "error");
+        } else {
+            showToast("Error adding reward: " + error.message, "error");
+        }
     }
     
-    hideLoading();
     isAdPlaying = false;
 }
 
@@ -295,20 +336,15 @@ window.signInWithGoogle = async function() {
         const user = result.user;
         
         console.log("Google user:", user);
-        console.log("Email:", user.email);
-        console.log("Name:", user.displayName);
         
-        // Check if user exists in Firestore
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
         
         if (!userSnap.exists()) {
-            // New user - create account
             await setDoc(userRef, {
                 userId: user.uid,
                 name: user.displayName || user.email.split('@')[0],
                 email: user.email,
-                password: "google_auth",
                 balance: appSettings.welcomeBonus,
                 tasksCompletedToday: 0,
                 completedTasks: [],
@@ -318,13 +354,12 @@ window.signInWithGoogle = async function() {
                 status: 'active',
                 authProvider: 'google'
             });
-            showToast(`✅ Welcome ${user.displayName || user.email}! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
+            showToast(`✅ Welcome! Welcome bonus: ₨${appSettings.welcomeBonus}`, "success");
             addActivity(`🎉 New user joined via Google Sign-In`);
         } else {
             showToast(`✅ Welcome back, ${user.displayName || user.email}!`, "success");
         }
         
-        // Set current user
         currentUser = {
             userId: user.uid,
             name: user.displayName || user.email.split('@')[0],
@@ -341,14 +376,7 @@ window.signInWithGoogle = async function() {
         
     } catch (error) {
         console.error("Google Sign-In Error:", error);
-        
-        if (error.code === 'auth/account-exists-with-different-credential') {
-            showToast("An account already exists with this email. Please sign in with email/password first.", "error");
-        } else if (error.code === 'auth/popup-blocked') {
-            showToast("Popup blocked! Please allow popups for this site.", "error");
-        } else {
-            showToast("Google Sign-In failed: " + error.message, "error");
-        }
+        showToast("Google Sign-In failed: " + error.message, "error");
     }
     
     hideLoading();
@@ -361,7 +389,6 @@ function generateUniqueCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// ========== DETECT IF USER COMPLETED OFFER ==========
 async function detectOfferCompletion(offerId, userId) {
     if (localStorage.getItem(`offer_${offerId}_completed`) === 'true') return true;
     if (sessionStorage.getItem(`offer_${offerId}_status`) === 'completed') return true;
@@ -473,7 +500,6 @@ window.openOfferInNewTab = function(link, taskId) {
     showToast("Complete the offer, then come back to claim your reward.", "info");
 };
 
-// ========== COMPLETE OFFER WITH AUTO-DETECT & UNIQUE CODE ==========
 window.completeOfferFromDetails = async function() {
     if (!currentUser) {
         showToast("Please login first!", "error");
@@ -496,7 +522,7 @@ window.completeOfferFromDetails = async function() {
     
     if (!isCompleted) {
         hideLoading();
-        showToast("❌ Please complete the offer first! Download the app and complete all steps, then try again.", "error");
+        showToast("❌ Please complete the offer first!", "error");
         return;
     }
     
@@ -556,12 +582,12 @@ window.verifyAndClaimReward = async function() {
     const enteredCode = document.getElementById('verificationCodeInput')?.value;
     
     if (!enteredCode || enteredCode !== pendingVerification?.code) {
-        showToast("❌ Invalid code! Please enter the correct 6-digit code.", "error");
+        showToast("❌ Invalid code!", "error");
         return;
     }
     
     if (!pendingVerification || !currentUser) {
-        showToast("Session expired! Please try again.", "error");
+        showToast("Session expired!", "error");
         closeCodeDialog();
         return;
     }
@@ -570,26 +596,17 @@ window.verifyAndClaimReward = async function() {
     
     try {
         const userRef = doc(db, 'users', currentUser.userId);
-        
-        // Get current balance
         const userSnap = await getDoc(userRef);
         const currentBalance = userSnap.data()?.balance || 0;
-        console.log("Current balance:", currentBalance);
-        console.log("Adding reward:", pendingVerification.reward);
         
-        // Update Firestore
         await updateDoc(userRef, {
             balance: increment(pendingVerification.reward),
-            completedTasks: arrayUnion(pendingVerification.offerId),
-            tasksCompletedToday: increment(1)
+            completedTasks: arrayUnion(pendingVerification.offerId)
         });
         
-        // Verify update
         const updatedSnap = await getDoc(userRef);
         const newBalance = updatedSnap.data()?.balance || 0;
-        console.log("New balance:", newBalance);
         
-        // Update local data
         appData.balance = newBalance;
         appData.completedTasks.push(pendingVerification.offerId);
         
@@ -729,22 +746,36 @@ function renderWithdrawals() {
     `).join('');
 }
 
+// ========== DAILY BONUS / CHECK-IN BONUS ==========
 window.claimDailyBonus = async function() {
     if (!currentUser) return;
     const lastBonus = localStorage.getItem('lastBonus_' + currentUser.userId);
     const today = new Date().toDateString();
-    if (lastBonus === today) { showToast("Already claimed!", "error"); return; }
-    const bonus = 20 + (appData.streak * 2);
-    showLoading("Claiming...");
+    if (lastBonus === today) { 
+        showToast("Already claimed today's check-in bonus!", "error"); 
+        return; 
+    }
+    
+    const bonus = 1;
+    
+    showLoading("Claiming check-in bonus...");
     await new Promise(r => setTimeout(r, 1000));
     try {
         const userRef = doc(db, 'users', currentUser.userId);
-        await updateDoc(userRef, { balance: increment(bonus), streak: increment(1) });
-        appData.balance += bonus; appData.streak++;
+        await updateDoc(userRef, { 
+            balance: increment(bonus), 
+            streak: increment(1) 
+        });
+        appData.balance += bonus; 
+        appData.streak++;
         localStorage.setItem('lastBonus_' + currentUser.userId, today);
-        updateUI(); addActivity(`🎁 Daily bonus ₨${bonus}`);
-        showToast(`🎁 +₨${bonus} bonus!`, "success");
-    } catch (error) { showToast("Failed!", "error"); }
+        updateUI(); 
+        addActivity(`📅 Daily check-in bonus: ₨${bonus}`);
+        showToast(`📅 +₨${bonus} check-in bonus!`, "success");
+    } catch (error) { 
+        console.error(error);
+        showToast("Failed to claim bonus!", "error"); 
+    }
     hideLoading();
 };
 
@@ -771,8 +802,8 @@ async function checkPendingItems() {
 }
 
 function updateUI() {
-    document.getElementById('mainBalance').innerText = appData.balance;
-    document.getElementById('withdrawBalance').innerText = appData.balance;
+    document.getElementById('mainBalance').innerText = appData.balance.toFixed(2);
+    document.getElementById('withdrawBalance').innerText = appData.balance.toFixed(2);
     document.getElementById('streakDays').innerText = appData.streak;
     document.getElementById('referralsCount').innerText = appData.referrals;
     document.getElementById('todayTasks').innerText = appData.completedTasks.length;
