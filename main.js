@@ -1,4 +1,4 @@
-// ========== KAMAONOW USER APP - WITH FIXED GOOGLE LOGIN ==========
+// ========== KAMAONOW USER APP - FINAL WITH ALL FIXES ==========
 console.log("🚀 KamaoNow Loading...");
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
@@ -37,11 +37,14 @@ let allWithdrawals = [];
 let currentOffer = null;
 let isAdPlaying = false;
 
+// ========== APP SETTINGS - FINAL ==========
 let appSettings = {
-    minWithdrawal: 200,
+    minWithdrawal: 10,      // 🔥 Minimum withdrawal ₹10
+    maxWithdrawal: 200,     // 🔥 Maximum withdrawal ₹200
+    maxWithdrawalsPerDay: 3, // 🔥 Maximum 3 withdrawals per day
     dailyTaskLimit: 20,
     referralCommission: 15,
-    welcomeBonus: 100,
+    welcomeBonus: 1,        // 🔥 Welcome bonus ₹1 only
     adReward: 0.10,
     adCooldown: 30,
     adDailyLimit: 20
@@ -153,11 +156,12 @@ function updateAdCount() {
 
 function updateUISettings() {
     const minWithdrawLabel = document.querySelector('.withdraw-input label');
-    if (minWithdrawLabel) minWithdrawLabel.innerHTML = `Amount (Min ₨${appSettings.minWithdrawal})`;
+    if (minWithdrawLabel) minWithdrawLabel.innerHTML = `Amount (Min ₨${appSettings.minWithdrawal} - Max ₨${appSettings.maxWithdrawal})`;
     const withdrawAmountInput = document.getElementById('withdrawAmount');
     if (withdrawAmountInput) {
-        withdrawAmountInput.placeholder = `Min ₨${appSettings.minWithdrawal}`;
+        withdrawAmountInput.placeholder = `Min ₨${appSettings.minWithdrawal} - Max ₨${appSettings.maxWithdrawal}`;
         withdrawAmountInput.min = appSettings.minWithdrawal;
+        withdrawAmountInput.max = appSettings.maxWithdrawal;
     }
     updateReferralDisplay();
     updateAdLimitDisplay();
@@ -172,10 +176,12 @@ async function loadSettings() {
         const settingsSnap = await getDoc(settingsRef);
         if (settingsSnap.exists()) {
             const data = settingsSnap.data();
-            appSettings.minWithdrawal = data.minWithdrawal !== undefined ? data.minWithdrawal : 200;
+            appSettings.minWithdrawal = data.minWithdrawal !== undefined ? data.minWithdrawal : 10;
+            appSettings.maxWithdrawal = data.maxWithdrawal !== undefined ? data.maxWithdrawal : 200;
+            appSettings.maxWithdrawalsPerDay = data.maxWithdrawalsPerDay !== undefined ? data.maxWithdrawalsPerDay : 3;
             appSettings.dailyTaskLimit = data.dailyTaskLimit !== undefined ? data.dailyTaskLimit : 20;
             appSettings.referralCommission = data.referralCommission !== undefined ? data.referralCommission : 15;
-            appSettings.welcomeBonus = data.welcomeBonus !== undefined ? data.welcomeBonus : 100;
+            appSettings.welcomeBonus = data.welcomeBonus !== undefined ? data.welcomeBonus : 1;
             appSettings.adReward = data.adReward !== undefined ? data.adReward : 0.10;
             appSettings.adCooldown = data.adCooldown !== undefined ? data.adCooldown : 30;
             appSettings.adDailyLimit = data.adDailyLimit !== undefined ? data.adDailyLimit : 20;
@@ -388,7 +394,6 @@ window.signInWithGoogle = async function() {
         provider.addScope('profile');
         provider.addScope('email');
         
-        // 🔥 FIX: No recaptchaVerifier needed for popup
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
         
@@ -433,7 +438,6 @@ window.signInWithGoogle = async function() {
         document.getElementById('appContainer').style.display = 'block';
         document.getElementById('userName').innerText = currentUser.name;
         
-        // Update referral code display
         const userCodeDisplay = document.getElementById('userReferralCode');
         if (userCodeDisplay && currentUser.referralCode) {
             userCodeDisplay.innerText = currentUser.referralCode;
@@ -502,21 +506,27 @@ window.registerUser = async function() {
             referredBy: referralCode || null
         });
         
+        // 🔥 FIXED: Referral bonus with increment
         if (referralCode && referralCode.length === 6) {
             const referrerQuery = query(collection(db, 'users'), 
                 where('referralCode', '==', referralCode));
             const referrerSnap = await getDocs(referrerQuery);
             
             if (!referrerSnap.empty) {
-                referrerSnap.forEach(async (docSnap) => {
+                for (const docSnap of referrerSnap.docs) {
                     const referrerData = docSnap.data();
                     const bonusAmount = 25;
+                    const newReferrerBalance = (referrerData.balance || 0) + bonusAmount;
+                    const newReferralsCount = (referrerData.referrals || 0) + 1;
+                    
                     await updateDoc(docSnap.ref, {
-                        balance: (referrerData.balance || 0) + bonusAmount,
-                        referrals: (referrerData.referrals || 0) + 1
+                        balance: newReferrerBalance,
+                        referrals: newReferralsCount
                     });
+                    
+                    console.log(`✅ Referrer ${referrerData.name} got ₨${bonusAmount} bonus! Total referrals: ${newReferralsCount}`);
                     showToast(`✅ Referrer gets ₨${bonusAmount} bonus!`, "success");
-                });
+                }
             } else {
                 showToast("⚠️ Invalid referral code! No bonus given.", "warning");
             }
@@ -828,7 +838,7 @@ window.claimDailyBonus = async function() {
     hideLoading();
 };
 
-// ========== WITHDRAWAL FUNCTIONS ==========
+// ========== WITHDRAWAL FUNCTIONS WITH LIMITS ==========
 window.requestWithdrawal = async function() {
     if (!currentUser) return;
     const amount = parseInt(document.getElementById('withdrawAmount')?.value);
@@ -840,8 +850,22 @@ window.requestWithdrawal = async function() {
         showToast(`Min ₨${appSettings.minWithdrawal}!`, "error"); 
         return; 
     }
+    if (amount > appSettings.maxWithdrawal) {
+        showToast(`Max withdrawal is ₨${appSettings.maxWithdrawal} per request!`, "error");
+        return;
+    }
     if (!account) { showToast("Enter account!", "error"); return; }
     if (amount > appData.balance) { showToast("Insufficient balance!", "error"); return; }
+    
+    // Check daily withdrawal limit
+    const today = new Date().toDateString();
+    const withdrawKey = `withdrawals_count_${currentUser.userId}_${today}`;
+    let todayWithdrawals = parseInt(localStorage.getItem(withdrawKey) || 0);
+    
+    if (todayWithdrawals >= appSettings.maxWithdrawalsPerDay) {
+        showToast(`Daily withdrawal limit reached (${appSettings.maxWithdrawalsPerDay} per day)! Try tomorrow.`, "error");
+        return;
+    }
     
     showLoading("Submitting...");
     try {
@@ -858,6 +882,9 @@ window.requestWithdrawal = async function() {
         appData.balance = newBalance;
         updateUI();
         
+        // Increment daily withdrawal count
+        localStorage.setItem(withdrawKey, todayWithdrawals + 1);
+        
         showToast(`✅ Withdrawal request submitted!`, "success");
         addActivity(`💰 Withdrawal request of ₨${amount}`);
         
@@ -866,7 +893,10 @@ window.requestWithdrawal = async function() {
         document.querySelectorAll('.method-option').forEach(opt => opt.classList.remove('selected'));
         selectedMethod = null;
         if (document.getElementById('withdrawHistoryScreen').classList.contains('active')) loadWithdrawalHistory();
-    } catch (error) { showToast("Failed!", "error"); }
+    } catch (error) { 
+        console.error(error);
+        showToast("Failed!", "error"); 
+    }
     hideLoading();
 };
 
@@ -1014,8 +1044,7 @@ window.loginUser = async function() {
     hideLoading();
 };
 
-// ========== FIXED INITIALIZATION ==========
-// Make sure auth modal is shown if not logged in
+// ========== INITIALIZATION ==========
 const savedUserData = localStorage.getItem('currentUser');
 if (savedUserData) {
     try {
@@ -1036,4 +1065,4 @@ if (savedUserData) {
 }
 
 setInterval(() => { if (currentUser) checkPendingItems(); }, 30000);
-console.log("✅ KamaoNow Ready with Dark Master Referral System!");
+console.log("✅ KamaoNow Ready! Welcome Bonus: ₹1 | Min Withdrawal: ₹10 | Max: ₹200 | Max 3 withdrawals/day");
